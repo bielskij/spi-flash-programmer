@@ -166,6 +166,127 @@ bool _serialWrite(uint8_t *buffer, uint32_t bufferSize) {
 }
 
 
+bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
+	bool ret = true;
+
+	do {
+		*responseWritten = 0;
+
+		// Send
+		{
+			uint16_t txDataSize = 4 + dataSize + 1;
+			uint8_t txData[txDataSize];
+
+			txData[0] = PROTO_SYNC_BYTE;
+			txData[1] = cmd;
+			txData[2] = dataSize >> 8;
+			txData[3] = dataSize;
+
+			memcpy(txData + 4, data, dataSize);
+
+			txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
+
+			ret = _serialWrite(txData, txDataSize);
+			if (! ret) {
+				break;
+			}
+		}
+
+		// Receive
+		{
+			uint8_t crc = PROTO_CRC8_START;
+			uint8_t tmp;
+
+			// sync
+			{
+				ret = _serialGet(&tmp);
+				if (! ret) {
+					break;
+				}
+
+				ret = tmp == PROTO_SYNC_BYTE;
+				if (! ret) {
+					ERR(("Received byte is not a sync byte!"));
+					break;
+				}
+
+				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
+			}
+
+			// code
+			{
+				ret = _serialGet(&tmp);
+				if (! ret) {
+					break;
+				}
+
+				if (tmp != PROTO_NO_ERROR) {
+					ERR(("Received error! (%#02x)", tmp));
+				}
+
+				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
+			}
+
+			// length
+			{
+				uint16_t dataLen = 0;
+
+				for (int i = 0; i < 2; i++) {
+					ret = _serialGet(&tmp);
+					if (! ret) {
+						break;
+					}
+
+					dataLen |= (tmp << (8 * (1 - i)));
+
+					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
+				}
+
+				if (! ret) {
+					break;
+				}
+
+				// Data
+				for (uint16_t i = 0; i < dataLen; i++) {
+					ret = _serialGet(&tmp);
+					if (! ret) {
+						break;
+					}
+
+					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
+
+					if (i < responseSize) {
+						response[i] = tmp;
+
+						*responseWritten = *responseWritten + 1;
+					}
+				}
+
+				if (! ret) {
+					break;
+				}
+			}
+
+			// CRC
+			{
+				ret = _serialGet(&tmp);
+				if (! ret) {
+					break;
+				}
+
+				ret = tmp == crc;
+				if (! ret) {
+					ERR(("CRC mismatch!"));
+					break;
+				}
+			}
+		}
+	} while (0);
+
+	return ret;
+}
+
+
 
 int main(int argc, char *argv[]) {
 	const char *ttyPath = argv[1];
@@ -215,33 +336,18 @@ int main(int argc, char *argv[]) {
 		PRINTF(("Device %s opened!", ttyPath));
 
 		{
-			uint8_t  tx[32];
-			uint16_t txSize = 0;
+			uint8_t data[4];
+			uint8_t response[6];
+			size_t  responseWritten;
 
-			tx[txSize++] = PROTO_SYNC_BYTE;
-			tx[txSize++] = PROTO_CMD_SPI_TRANSFER;
-			tx[txSize++] = 0;
-			tx[txSize++] = 4;
+			data[0] = 0;
+			data[1] = 0;
+			data[2] = 0;
+			data[3] = 6;
 
-			tx[txSize++] = 0;
-			tx[txSize++] = 0;
-			tx[txSize++] = 0;
-			tx[txSize++] = 8;
+			_cmdExecute(PROTO_CMD_SPI_TRANSFER, data, sizeof(data), response, sizeof(response), &responseWritten);
 
-			tx[txSize++] = crc8_get(tx, txSize, PROTO_CRC8_POLY, PROTO_CRC8_START);
-
-			_serialWrite(tx, txSize);
-
-			uint8_t rx[64];
-			uint16_t rxSize = 0;
-
-			while (_serialGet(&rx[rxSize])) {
-				rxSize++;
-			}
-
-			DBG(("Read %d bytes %02x == %02x", rxSize, rx[rxSize - 1], crc8_get(rx, rxSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START)));
-
-			debug_dumpBuffer(rx, rxSize, 32, 0);
+			debug_dumpBuffer(response, responseWritten, 32, 0);
 		}
 	} while (0);
 
