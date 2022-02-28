@@ -445,6 +445,96 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 }
 
 
+static bool _spiFlashWriteEnable() {
+	bool ret = true;
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[] = {
+				0x06 // WREN
+			};
+
+			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
+			if (! ret) {
+				break;
+			}
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+
+static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
+	bool ret = true;
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[] = {
+				0x06, // WREN
+				0x01, // WRSR
+				0x00
+			};
+
+			if (status->srWriteDisable) {
+				tx[1] |= 0x80;
+			}
+
+			if (status->bp0) {
+				tx[1] |= 0x04;
+			}
+
+			if (status->bp1) {
+				tx[1] |= 0x08;
+			}
+
+			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
+			if (! ret) {
+				break;
+			}
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+
+static bool _spiFlashChipErase() {
+	bool ret = true;
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[] = {
+				0x06, // WREN
+				0xC7 // CE
+			};
+
+			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
+			if (! ret) {
+				break;
+			}
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+
 #define SECTOR_SIZE 256
 
 
@@ -600,6 +690,7 @@ int main(int argc, char *argv[]) {
 				status.bp0, status.bp1, status.srWriteDisable, status.writeEnableLatch, status.writeInProgress
 			));
 
+#if 0
 			{
 				size_t  flashSize = dev->blockCount * dev->blockSize;
 				uint8_t flashData[flashSize];
@@ -621,6 +712,100 @@ int main(int argc, char *argv[]) {
 					}
 				}
 			}
+#endif
+
+#if 0
+			// Disable write protection
+			{
+				if (! _spiFlashGetStatus(&status)) {
+					break;
+				}
+
+				if (status.srWriteDisable || status.bp0 || status.bp1) {
+					DBG(("Disabling Write protection"));
+
+					if (! _spiFlashWriteEnable()) {
+						ERR(("Unable to write enable"));
+						break;
+					}
+
+					status.srWriteDisable = false;
+					status.bp0            = false;
+					status.bp1            = false;
+
+					if (! _spiFlashWriteStatusRegister(&status)) {
+						ERR(("Unable to write status register!"));
+						break;
+					}
+
+					if (! _spiFlashGetStatus(&status)) {
+						break;
+					}
+
+					if (status.srWriteDisable || status.bp0 || status.bp1) {
+						ERR(("Unable to unlock chip!"));
+						break;
+					}
+				}
+			}
+#endif
+#if 1
+			// Erase chip
+			{
+				if (! _spiFlashGetStatus(&status)) {
+					ERR(("Unable to get status"));
+					break;
+				}
+
+				PRINTF(("Status before erase : BP0: %u, BP1: %u, SRWD: %u, WEL: %u, WIP: %u",
+					status.bp0, status.bp1, status.srWriteDisable, status.writeEnableLatch, status.writeInProgress
+				));
+
+				if (! _spiFlashWriteEnable()) {
+					ERR(("Unable to write enable"));
+					break;
+				}
+
+				if (! _spiFlashChipErase()) {
+					ERR(("Unable to erase chip!"));
+					break;
+				}
+
+				do {
+					DBG(("Waiting on write finish"));
+
+					if (! _spiFlashGetStatus(&status)) {
+						ERR(("Unable to get status"));
+						break;
+					}
+
+					sleep(1);
+				} while (status.writeInProgress);
+			}
+#endif
+#if 1
+			{
+				size_t  flashSize = 8192;//dev->blockCount * dev->blockSize;
+				uint8_t flashData[flashSize];
+				size_t  flashWritten;
+
+				memset(flashData, 0, flashSize);
+
+				if (! _spiFlashRead(0, flashData, flashSize, &flashWritten)) {
+					break;
+				}
+
+				debug_dumpBuffer(flashData, 8192, 32, 0);
+
+				{
+					FILE *bin = fopen("/tmp/data.bin", "w");
+					if (bin != NULL) {
+						fwrite(flashData, 1, flashSize, bin);
+						fclose(bin);
+					}
+				}
+			}
+#endif
 		}
 	} while (0);
 
