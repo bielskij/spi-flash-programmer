@@ -90,11 +90,15 @@ void spi_initialize() {
 	PIO_SET_OUTPUT(SPI_CS_BANK, SPI_CS_PIN);
 	CS_HIGH();
 
+	PIO_SET_OUTPUT(B, 3); // MOSI
+	PIO_SET_OUTPUT(B, 5); // SCK
+
 	// clear double speed
 	SPSR &= ~_BV(SPI2X);
 
-	// Enable SPI, Master, clock rate f_osc/128
-	SPCR = _BV(SPE) | _BV(MSTR) | _BV(SPR1) | _BV(SPR0);
+	// Enable SPI, Master, clock rate f_osc/2, MODE 0
+	SPSR = _BV(SPI2X);
+	SPCR = _BV(SPE) | _BV(MSTR);
 }
 
 
@@ -170,17 +174,15 @@ static void _response(uint8_t code, uint8_t *buffer, uint16_t bufferSize) {
 	uart_send(code);
 	crc = crc8_getForByte(code, PROTO_CRC8_POLY, crc);
 
-	if (bufferSize) {
-		uart_send(bufferSize >> 8);
-		crc = crc8_getForByte(bufferSize >> 8, PROTO_CRC8_POLY, crc);
+	uart_send(bufferSize >> 8);
+	crc = crc8_getForByte(bufferSize >> 8, PROTO_CRC8_POLY, crc);
 
-		uart_send(bufferSize & 0xff);
-		crc = crc8_getForByte(bufferSize & 0xff, PROTO_CRC8_POLY, crc);
+	uart_send(bufferSize & 0xff);
+	crc = crc8_getForByte(bufferSize & 0xff, PROTO_CRC8_POLY, crc);
 
-		for (uint16_t i = 0; i < bufferSize; i++) {
-			uart_send(buffer[i]);
-			crc = crc8_getForByte(buffer[i], PROTO_CRC8_POLY, crc);
-		}
+	for (uint16_t i = 0; i < bufferSize; i++) {
+		uart_send(buffer[i]);
+		crc = crc8_getForByte(buffer[i], PROTO_CRC8_POLY, crc);
 	}
 
 	uart_send(crc);
@@ -328,12 +330,16 @@ int main(int argc, char *argv[]) {
 								case PROTO_CMD_SPI_CS_HI:
 									{
 										CS_HIGH();
+
+										_response(PROTO_NO_ERROR, NULL, 0);
 									}
 									break;
 
 								case PROTO_CMD_SPI_CS_LO:
 									{
 										CS_LOW();
+
+										_response(PROTO_NO_ERROR, NULL, 0);
 									}
 									break;
 
