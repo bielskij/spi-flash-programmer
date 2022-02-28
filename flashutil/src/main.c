@@ -170,7 +170,9 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 	bool ret = true;
 
 	do {
-		*responseWritten = 0;
+		if (responseWritten != NULL) {
+			*responseWritten = 0;
+		}
 
 		// Send
 		{
@@ -182,7 +184,9 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 			txData[2] = dataSize >> 8;
 			txData[3] = dataSize;
 
-			memcpy(txData + 4, data, dataSize);
+			if (dataSize) {
+				memcpy(txData + 4, data, dataSize);
+			}
 
 			txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
 
@@ -256,9 +260,13 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
 
 					if (i < responseSize) {
-						response[i] = tmp;
+						if (response != NULL) {
+							response[i] = tmp;
+						}
 
-						*responseWritten = *responseWritten + 1;
+						if (responseWritten != NULL) {
+							*responseWritten = *responseWritten + 1;
+						}
 					}
 				}
 
@@ -286,6 +294,147 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 	return ret;
 }
 
+
+typedef struct _SpiFlashInfo {
+	uint8_t manufacturerId;
+	uint8_t deviceId[2];
+} SpiFlashInfo;
+
+
+static bool _spiCs(bool high) {
+	return _cmdExecute(high ? PROTO_CMD_SPI_CS_HI : PROTO_CMD_SPI_CS_LO, NULL, 0, NULL, 0, NULL);
+}
+
+
+bool _spiFlashGetInfo(SpiFlashInfo *info) {
+	bool ret = true;
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[] = {
+				0x9f // RDID
+			};
+
+			uint8_t rx[3];
+			size_t rxWritten;
+
+			memset(info, 0, sizeof(*info));
+
+			ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
+			if (! ret) {
+				break;
+			}
+
+			info->manufacturerId = rx[0];
+			info->deviceId[0]    = rx[1];
+			info->deviceId[1]    = rx[2];
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+
+typedef struct _SpiFlashStatus {
+	bool bp1; // level of protected block
+	bool bp0;
+
+	bool writeEnableLatch;
+	bool writeInProgress;
+
+	bool srWriteDisable;
+} SpiFlashStatus;
+
+
+bool _spiFlashGetStatus(SpiFlashStatus *status) {
+	bool ret = true;
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[] = {
+				0x05 // RDSR
+			};
+
+			uint8_t rx[1];
+			size_t rxWritten;
+
+			memset(status, 0, sizeof(*status));
+
+			ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
+			if (! ret) {
+				break;
+			}
+
+			status->srWriteDisable   = (rx[0] & 0x80) != 0;
+			status->bp1              = (rx[0] & 0x08) != 0;
+			status->bp0              = (rx[0] & 0x04) != 0;
+			status->writeEnableLatch = (rx[0] & 0x02) != 0;
+			status->writeInProgress  = (rx[0] & 0x01) != 0;
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+
+#define SECTOR_SIZE 256
+
+
+bool _spiFlashReadWhole(uint8_t *buffer, size_t bufferSize, size_t *bufferWritten) {
+	bool ret = true;
+
+	*bufferWritten = 0;
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[] = {
+				0x03, // Read
+				0x00, // Address
+				0x00,
+				0x00
+			};
+
+			uint8_t rx[SECTOR_SIZE];
+			size_t rxWritten;
+
+			while (bufferSize > 0) {
+				uint16_t toRead = bufferSize > SECTOR_SIZE ? SECTOR_SIZE : SECTOR_SIZE - bufferSize;
+
+				DBG(("Reading %u bytes", toRead));
+
+				ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, NULL, 0, rx, toRead, &rxWritten);
+				if (! ret) {
+					break;
+				}
+
+				memcpy(buffer + *bufferWritten, rx, toRead);
+
+				*bufferWritten = *bufferWritten + toRead;
+			}
+
+			if (! ret) {
+				break;
+			}
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
 
 
 int main(int argc, char *argv[]) {
@@ -336,18 +485,37 @@ int main(int argc, char *argv[]) {
 		PRINTF(("Device %s opened!", ttyPath));
 
 		{
-			uint8_t data[4];
-			uint8_t response[6];
-			size_t  responseWritten;
+			SpiFlashInfo info;
+			SpiFlashStatus status;
 
-			data[0] = 0;
-			data[1] = 0;
-			data[2] = 0;
-			data[3] = 6;
+			if (! _spiFlashGetInfo(&info)) {
+				break;
+			}
 
-			_cmdExecute(PROTO_CMD_SPI_TRANSFER, data, sizeof(data), response, sizeof(response), &responseWritten);
+			if (
+				((info.deviceId[0] == 0xff) && (info.deviceId[0] == 0xff) && (info.manufacturerId == 0xff)) ||
+				((info.deviceId[0] == 0x00) && (info.deviceId[0] == 0x00) && (info.manufacturerId == 0x00))
+			) {
+				PRINTF(("No flash device detected!"));
 
-			debug_dumpBuffer(response, responseWritten, 32, 0);
+				break;
+			}
+
+			PRINTF(("Have flash %02x, %02x, %02x of size: %u bytes",
+				info.manufacturerId, info.deviceId[0], info.deviceId[1], 1 << info.deviceId[1]
+			));
+
+			if (! _spiFlashGetStatus(&status)) {
+				break;
+			}
+
+			PRINTF(("Status: BP0: %u, BP1: %u, SRWD: %u, WEL: %u, WIP: %u",
+				status.bp0, status.bp1, status.srWriteDisable, status.writeEnableLatch, status.writeInProgress
+			));
+
+			{
+//				uint8_t flashData[]
+			}
 		}
 	} while (0);
 
