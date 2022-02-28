@@ -32,6 +32,40 @@
 static int _fd = -1;
 
 
+typedef struct _SpiFlashDevice {
+	char  *name;
+	char   id[5];
+	char   idLen;
+	size_t blockSize;
+	size_t blockCount;
+	size_t pageSize;
+} SpiFlashDevice;
+
+
+#define INFO(_jedec_id, _ext_id, _sector_size, _n_sectors)         \
+	.id = {                                                        \
+		((_jedec_id) >> 16) & 0xff,                                \
+		((_jedec_id) >> 8) & 0xff,                                 \
+		(_jedec_id) & 0xff,                                        \
+		((_ext_id) >> 8) & 0xff,                                   \
+		(_ext_id) & 0xff,                                          \
+	},                                                             \
+	.idLen      = (!(_jedec_id) ? 0 : (3 + ((_ext_id) ? 2 : 0))), \
+	.blockSize  = (_sector_size),                                 \
+	.blockCount = (_n_sectors),                                   \
+	.pageSize   = 256,
+
+static const SpiFlashDevice flashDevices[] = {
+	{
+		"Macronix MX25L2026E/MX25l2005A",
+
+		INFO(0xc22012, 0, 64 * 1024, 4)
+	}
+};
+
+static const int flashDevicesCount = sizeof(flashDevices) / sizeof(flashDevices[0]);
+
+
 uint8_t crc8_getForByte(uint8_t byte, uint8_t polynomial, uint8_t start) {
 	uint8_t remainder = start;
 
@@ -390,7 +424,7 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 #define SECTOR_SIZE 256
 
 
-bool _spiFlashReadWhole(uint8_t *buffer, size_t bufferSize, size_t *bufferWritten) {
+bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t *bufferWritten) {
 	bool ret = true;
 
 	*bufferWritten = 0;
@@ -400,9 +434,9 @@ bool _spiFlashReadWhole(uint8_t *buffer, size_t bufferSize, size_t *bufferWritte
 		do {
 			uint8_t tx[] = {
 				0x03, // Read
-				0x00, // Address
-				0x00,
-				0x00
+				(address >> 16) & 0xff, // Address
+				(address >>  8) & 0xff,
+				(address >>  0) & 0xff
 			};
 
 			uint8_t rx[SECTOR_SIZE];
@@ -485,6 +519,8 @@ int main(int argc, char *argv[]) {
 		PRINTF(("Device %s opened!", ttyPath));
 
 		{
+			const SpiFlashDevice *dev = NULL;
+
 			SpiFlashInfo info;
 			SpiFlashStatus status;
 
@@ -505,6 +541,24 @@ int main(int argc, char *argv[]) {
 				info.manufacturerId, info.deviceId[0], info.deviceId[1], 1 << info.deviceId[1]
 			));
 
+			for (int i = 0; i < flashDevicesCount; i++) {
+				const SpiFlashDevice *ip = &flashDevices[i];
+
+				if (
+					(ip->id[0] == info.manufacturerId) &&
+					(ip->id[1] == info.deviceId[0]) &&
+					(ip->id[2] == info.deviceId[1])
+				) {
+					dev = ip;
+					break;
+				}
+			}
+
+			if (dev == NULL) {
+				ERR(("Unrecognized SPI flash device!"));
+				break;
+			}
+
 			if (! _spiFlashGetStatus(&status)) {
 				break;
 			}
@@ -514,7 +568,17 @@ int main(int argc, char *argv[]) {
 			));
 
 			{
-//				uint8_t flashData[]
+				size_t  flashSize = dev->blockCount * dev->blockSize;
+				uint8_t flashData[flashSize];
+				size_t  flashWritten;
+
+				memset(flashData, 0, flashSize);
+
+				if (! _spiFlashRead(0, flashData, flashSize, &flashWritten)) {
+					break;
+				}
+
+				debug_dumpBuffer(flashData, 4096, 32, 0);
 			}
 		}
 	} while (0);
