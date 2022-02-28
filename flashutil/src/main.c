@@ -34,11 +34,11 @@ static int _fd = -1;
 
 typedef struct _SpiFlashDevice {
 	char  *name;
-	char   id[5];
-	char   idLen;
-	size_t blockSize;
-	size_t blockCount;
-	size_t pageSize;
+	uint8_t id[5];
+	char    idLen;
+	size_t  blockSize;
+	size_t  blockCount;
+	size_t  pageSize;
 } SpiFlashDevice;
 
 
@@ -340,6 +340,30 @@ static bool _spiCs(bool high) {
 }
 
 
+bool _spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, size_t *rxWritten) {
+	bool ret = true;
+
+	do {
+		uint16_t buffSize = 4 + txSize;
+		uint8_t buff[buffSize];
+
+		buff[0] = txSize >> 8;
+		buff[1] = txSize;
+		buff[2] = rxSize >> 8;
+		buff[3] = rxSize;
+
+		memcpy(&buff[4], tx, txSize);
+
+		ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, buff, buffSize, rx, rxSize, rxWritten);
+		if (! ret) {
+			break;
+		}
+	} while (0);
+
+	return ret;
+}
+
+
 bool _spiFlashGetInfo(SpiFlashInfo *info) {
 	bool ret = true;
 
@@ -350,19 +374,19 @@ bool _spiFlashGetInfo(SpiFlashInfo *info) {
 				0x9f // RDID
 			};
 
-			uint8_t rx[3];
+			uint8_t rx[4];
 			size_t rxWritten;
 
 			memset(info, 0, sizeof(*info));
 
-			ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
+			ret = _spiTransfer(tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
 			if (! ret) {
 				break;
 			}
 
-			info->manufacturerId = rx[0];
-			info->deviceId[0]    = rx[1];
-			info->deviceId[1]    = rx[2];
+			info->manufacturerId = rx[1];
+			info->deviceId[0]    = rx[2];
+			info->deviceId[1]    = rx[3];
 		} while (0);
 
 		if (! _spiCs(true)) {
@@ -395,21 +419,21 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 				0x05 // RDSR
 			};
 
-			uint8_t rx[1];
+			uint8_t rx[2];
 			size_t rxWritten;
 
 			memset(status, 0, sizeof(*status));
 
-			ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
+			ret = _spiTransfer(tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
 			if (! ret) {
 				break;
 			}
 
-			status->srWriteDisable   = (rx[0] & 0x80) != 0;
-			status->bp1              = (rx[0] & 0x08) != 0;
-			status->bp0              = (rx[0] & 0x04) != 0;
-			status->writeEnableLatch = (rx[0] & 0x02) != 0;
-			status->writeInProgress  = (rx[0] & 0x01) != 0;
+			status->srWriteDisable   = (rx[1] & 0x80) != 0;
+			status->bp1              = (rx[1] & 0x08) != 0;
+			status->bp0              = (rx[1] & 0x04) != 0;
+			status->writeEnableLatch = (rx[1] & 0x02) != 0;
+			status->writeInProgress  = (rx[1] & 0x01) != 0;
 		} while (0);
 
 		if (! _spiCs(true)) {
@@ -432,22 +456,29 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 	ret = _spiCs(false);
 	if (ret) {
 		do {
-			uint8_t tx[] = {
-				0x03, // Read
-				(address >> 16) & 0xff, // Address
-				(address >>  8) & 0xff,
-				(address >>  0) & 0xff
-			};
+			{
+				uint8_t tx[] = {
+					0x03, // Read
+					(address >> 16) & 0xff, // Address
+					(address >>  8) & 0xff,
+					(address >>  0) & 0xff
+				};
+
+				ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
+				if (! ret) {
+					break;
+				}
+			}
 
 			uint8_t rx[SECTOR_SIZE];
 			size_t rxWritten;
 
 			while (bufferSize > 0) {
-				uint16_t toRead = bufferSize > SECTOR_SIZE ? SECTOR_SIZE : SECTOR_SIZE - bufferSize;
+				uint16_t toRead = bufferSize >= SECTOR_SIZE ? SECTOR_SIZE : SECTOR_SIZE - bufferSize;
 
 				DBG(("Reading %u bytes", toRead));
 
-				ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, NULL, 0, rx, toRead, &rxWritten);
+				ret = _spiTransfer(NULL, 0, rx, toRead, &rxWritten);
 				if (! ret) {
 					break;
 				}
@@ -455,6 +486,8 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 				memcpy(buffer + *bufferWritten, rx, toRead);
 
 				*bufferWritten = *bufferWritten + toRead;
+
+				bufferSize -= toRead;
 			}
 
 			if (! ret) {
@@ -578,7 +611,15 @@ int main(int argc, char *argv[]) {
 					break;
 				}
 
-				debug_dumpBuffer(flashData, 4096, 32, 0);
+				debug_dumpBuffer(flashData, 8192, 32, 0);
+
+				{
+					FILE *bin = fopen("/tmp/data.bin", "w");
+					if (bin != NULL) {
+						fwrite(flashData, 1, flashSize, bin);
+						fclose(bin);
+					}
+				}
 			}
 		}
 	} while (0);
