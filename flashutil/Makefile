@@ -1,7 +1,9 @@
 all:
 	gcc -o flash-util \
-		-I../firmware/include \
+		-I../common/include \
 		-Iinclude \
+		\
+		../common/src/crc8.c \
 		\
 		src/serial.c \
 		src/debug.c \

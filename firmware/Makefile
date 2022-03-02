@@ -29,7 +29,7 @@ CFLAGS += -Wall -Wundef -Warray-bounds -Wformat -Wmissing-braces -Wreturn-type
 CFLAGS += -fshort-enums -fpack-struct  -fno-split-wide-types -ffunction-sections -fdata-sections
 CFLAGS += -mmcu=$(MCU) -DF_CPU=$(F_CPU) -mrelax -O2
 
-CFLAGS += -I$(DIR_SRC) -I$(DIR_INC)
+CFLAGS += -I$(DIR_SRC) -I$(DIR_INC) -I../common/include
 
 LDFLAGS += -Wl,--gc-sections
 
@@ -37,7 +37,8 @@ APP_NAME := firmware
 
 # common src
 SRC := \
-	$(DIR_SRC)/main.c
+	$(DIR_SRC)/main.c \
+	$(DIR_SRC)/../../common/src/crc8.c
 	
 TMP := $(foreach file, $(SRC), $(shell echo $(file) | sed -e 's|$(DIR_SRC)\/|$(DIR_OUT)\/|'))
 OBJ := $(foreach file, $(TMP), $(shell echo $(file) | sed -e 's|\.c$$|.c.o|' | sed -e 's|\.S$$|.S.o|')) 

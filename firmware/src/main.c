@@ -9,6 +9,7 @@
 #include <avr/io.h>
 
 #include "protocol.h"
+#include "crc8.h"
 
 #ifndef NULL
 	#define NULL ((void *) 0)
@@ -120,30 +121,6 @@ void spi_transfer(uint8_t *buffer, uint16_t txSize, uint16_t rxSize) {
 		}
 	}
 }
-
-
-static uint8_t crc8_getForByte(uint8_t byte, uint8_t polynomial, uint8_t start) {
-	uint8_t remainder = start;
-
-	remainder ^= byte;
-
-	{
-		uint8_t bit;
-
-		for (bit = 0; bit < 8; bit++) {
-			if (remainder & 0x01) {
-				remainder = (remainder >> 1) ^ polynomial;
-
-			} else {
-				remainder = (remainder >> 1);
-			}
-
-		}
-	}
-
-	return remainder;
-}
-
 
 
 #define SPI_BUFFER_SIZE 256

@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <getopt.h>
 
+#include "crc8.h"
 #include "protocol.h"
 #include "serial.h"
 #include "debug.h"
@@ -26,12 +27,14 @@ typedef struct _SpiFlashDevice {
 	char    idLen;
 	size_t  blockSize;
 	size_t  blockCount;
+	size_t  sectorSize;
+	size_t  sectorCount;
 	size_t  pageSize;
 	uint8_t protectMask;
 } SpiFlashDevice;
 
 
-#define INFO(_jedec_id, _ext_id, _sector_size, _n_sectors, _protectMask) \
+#define INFO(_jedec_id, _ext_id, _block_size, _n_blocks, _sector_size, _n_sectors, _protectMask) \
 		.id = {                                                        \
 			((_jedec_id) >> 16) & 0xff,                                \
 			((_jedec_id) >> 8) & 0xff,                                 \
@@ -40,17 +43,20 @@ typedef struct _SpiFlashDevice {
 			(_ext_id) & 0xff,                                          \
 		},                                                             \
 		.idLen       = (!(_jedec_id) ? 0 : (3 + ((_ext_id) ? 2 : 0))), \
-		.blockSize   = (_sector_size),                                 \
-		.blockCount  = (_n_sectors),                                   \
+		.blockSize   = (_block_size),                                  \
+		.blockCount  = (_n_blocks),                                    \
+		.sectorSize  = (_sector_size),                                 \
+		.sectorCount = (_n_sectors),                                   \
 		.pageSize    = 256,                                            \
 		.protectMask = _protectMask,
 
+#define KB(_x)(1024 * _x)
 
 static const SpiFlashDevice flashDevices[] = {
 	{
 		"Macronix MX25L2026E/MX25l2005A",
 
-		INFO(0xc22012, 0, 64 * 1024, 4, 0x8c)
+		INFO(0xc22012, 0, KB(64), 4, KB(4), 64, 0x8c)
 	}
 };
 
@@ -58,42 +64,6 @@ static const int flashDevicesCount = sizeof(flashDevices) / sizeof(flashDevices[
 
 
 static Serial *serial;
-
-
-uint8_t crc8_getForByte(uint8_t byte, uint8_t polynomial, uint8_t start) {
-	uint8_t remainder = start;
-
-	remainder ^= byte;
-
-	{
-		uint8_t bit;
-
-		for (bit = 0; bit < 8; bit++) {
-			if (remainder & 0x01) {
-				remainder = (remainder >> 1) ^ polynomial;
-
-			} else {
-				remainder = (remainder >> 1);
-			}
-
-		}
-	}
-
-	return remainder;
-}
-
-
-uint8_t crc8_get(uint8_t *buffer, uint16_t bufferSize, uint8_t polynomial, uint8_t start) {
-	uint8_t remainder = start;
-	uint16_t byte;
-
-	// Perform modulo-2 division, a byte at a time.
-	for (byte = 0; byte < bufferSize; ++byte) {
-		remainder = crc8_getForByte(buffer[byte], polynomial, remainder);
-	}
-
-	return remainder;
-}
 
 
 bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
@@ -495,6 +465,9 @@ int main(int argc, char *argv[]) {
 
 	do {
 		serial = new_serial(argv[1]);
+		if (serial == NULL) {
+			break;
+		}
 
 		{
 			const SpiFlashDevice *dev = NULL;
