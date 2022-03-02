@@ -39,27 +39,30 @@ typedef struct _SpiFlashDevice {
 	size_t  blockSize;
 	size_t  blockCount;
 	size_t  pageSize;
+	uint8_t protectMask;
 } SpiFlashDevice;
 
 
-#define INFO(_jedec_id, _ext_id, _sector_size, _n_sectors)         \
-	.id = {                                                        \
-		((_jedec_id) >> 16) & 0xff,                                \
-		((_jedec_id) >> 8) & 0xff,                                 \
-		(_jedec_id) & 0xff,                                        \
-		((_ext_id) >> 8) & 0xff,                                   \
-		(_ext_id) & 0xff,                                          \
-	},                                                             \
-	.idLen      = (!(_jedec_id) ? 0 : (3 + ((_ext_id) ? 2 : 0))), \
-	.blockSize  = (_sector_size),                                 \
-	.blockCount = (_n_sectors),                                   \
-	.pageSize   = 256,
+#define INFO(_jedec_id, _ext_id, _sector_size, _n_sectors, _protectMask) \
+		.id = {                                                        \
+			((_jedec_id) >> 16) & 0xff,                                \
+			((_jedec_id) >> 8) & 0xff,                                 \
+			(_jedec_id) & 0xff,                                        \
+			((_ext_id) >> 8) & 0xff,                                   \
+			(_ext_id) & 0xff,                                          \
+		},                                                             \
+		.idLen       = (!(_jedec_id) ? 0 : (3 + ((_ext_id) ? 2 : 0))), \
+		.blockSize   = (_sector_size),                                 \
+		.blockCount  = (_n_sectors),                                   \
+		.pageSize    = 256,                                            \
+		.protectMask = _protectMask,
+
 
 static const SpiFlashDevice flashDevices[] = {
 	{
 		"Macronix MX25L2026E/MX25l2005A",
 
-		INFO(0xc22012, 0, 64 * 1024, 4)
+		INFO(0xc22012, 0, 64 * 1024, 4, 0x8c)
 	}
 };
 
