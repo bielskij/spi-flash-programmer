@@ -1,5 +1,5 @@
 all:
-	gcc -o flash-util \
+	gcc -Wall -ggdb -o flash-util \
 		-I../common/include \
 		-Iinclude \
 		\

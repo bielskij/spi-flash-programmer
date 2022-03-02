@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#define _GNU_SOURCE         /* See feature_test_macros(7) */
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -63,6 +64,13 @@ static const SpiFlashDevice flashDevices[] = {
 static const int flashDevicesCount = sizeof(flashDevices) / sizeof(flashDevices[0]);
 
 
+static SpiFlashDevice unknownDevice = {
+	"Unknown SPI flash chip",
+
+	INFO(0, 0, 0, 0, 0, 0, 0)
+};
+
+
 static Serial *serial;
 
 
@@ -89,6 +97,8 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 			}
 
 			txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
+
+			debug_dumpBuffer(txData, txDataSize, 32, 0);
 
 			ret = serial->write(serial, txData, txDataSize, TIMEOUT_MS);
 			if (! ret) {
@@ -165,7 +175,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 						}
 
 						if (responseWritten != NULL) {
-							*responseWritten = *responseWritten + 1;
+							*responseWritten += 1;
 						}
 					}
 				}
@@ -265,15 +275,14 @@ bool _spiFlashGetInfo(SpiFlashInfo *info) {
 
 
 typedef struct _SpiFlashStatus {
-	bool bp1; // level of protected block
-	bool bp0;
-
 	bool writeEnableLatch;
 	bool writeInProgress;
 
-	bool srWriteDisable;
+	uint8_t raw;
 } SpiFlashStatus;
 
+#define STATUS_FLAG_WLE 0x02
+#define STATUS_FLAG_WIP 0x01
 
 bool _spiFlashGetStatus(SpiFlashStatus *status) {
 	bool ret = true;
@@ -295,11 +304,10 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 				break;
 			}
 
-			status->srWriteDisable   = (rx[1] & 0x80) != 0;
-			status->bp1              = (rx[1] & 0x08) != 0;
-			status->bp0              = (rx[1] & 0x04) != 0;
-			status->writeEnableLatch = (rx[1] & 0x02) != 0;
-			status->writeInProgress  = (rx[1] & 0x01) != 0;
+			status->raw = rx[1];
+
+			status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
+			status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
 		} while (0);
 
 		if (! _spiCs(true)) {
@@ -343,22 +351,9 @@ static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
 	if (ret) {
 		do {
 			uint8_t tx[] = {
-				0x06, // WREN
 				0x01, // WRSR
-				0x00
+				status->raw
 			};
-
-			if (status->srWriteDisable) {
-				tx[1] |= 0x80;
-			}
-
-			if (status->bp0) {
-				tx[1] |= 0x04;
-			}
-
-			if (status->bp1) {
-				tx[1] |= 0x08;
-			}
 
 			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
 			if (! ret) {
@@ -382,7 +377,6 @@ static bool _spiFlashChipErase() {
 	if (ret) {
 		do {
 			uint8_t tx[] = {
-				0x06, // WREN
 				0xC7 // CE
 			};
 
@@ -396,6 +390,57 @@ static bool _spiFlashChipErase() {
 			ret = false;
 		}
 	}
+
+	return ret;
+}
+
+
+static bool _spiFlashBlockErase(uint32_t address) {
+	bool ret = true;
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[] = {
+				0xd8, // BE
+				(address >> 16) & 0xff,
+				(address >>  8) & 0xff,
+				(address >>  0) & 0xff,
+			};
+
+			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
+			if (! ret) {
+				break;
+			}
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+
+static bool _spiFlashWriteWait(SpiFlashStatus *status, int timeIntervalMs) {
+	bool ret = true;
+
+	do {
+		ret = _spiFlashGetStatus(status);
+		if (! ret) {
+			break;
+		}
+
+		if (status->writeInProgress) {
+			struct timespec tv;
+
+			tv.tv_sec  = timeIntervalMs / 1000;
+			tv.tv_nsec = timeIntervalMs * 1000000;
+
+			nanosleep(&tv, NULL);
+		}
+	} while (status->writeInProgress);
 
 	return ret;
 }
@@ -460,11 +505,173 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 }
 
 
+typedef struct _Parameters {
+	bool help;
+
+	char *serialPort;
+	char *outputFile;
+	char *inputFile;
+
+	FILE *inputFd;
+	FILE *outputFd;
+
+	bool erase;
+	bool eraseBlock;
+	int  eraseBlockIdx;
+	bool eraseSector;
+	int  eraseSectorIdx;
+
+	bool read;
+	bool readBlock;
+	int  readBlockIdx;
+	bool readSector;
+	int  readSectorIdx;
+
+	bool write;
+	bool writeBlock;
+	int  writeBlockIdx;
+	bool writeSector;
+	int  writeSectorIdx;
+
+	bool unprotect;
+} Parameters;
+
+
+static struct option longOpts[] = {
+	{ "verbose",      no_argument,       0, 'v' },
+	{ "help",         no_argument,       0, 'h' },
+	{ "serial",       required_argument, 0, 'p' },
+	{ "output",       required_argument, 0, 'o' },
+	{ "input",        required_argument, 0, 'i' },
+
+	{ "erase",        no_argument,       0, 'E' },
+	{ "erase-block",  required_argument, 0, 'e' },
+	{ "erase-sector", required_argument, 0, 's' },
+
+	{ "read",         no_argument,       0, 'R' },
+	{ "read-block",   required_argument, 0, 'r' },
+	{ "read-sector",  required_argument, 0, 'S' },
+
+	{ "write",        no_argument,       0, 'W' },
+	{ "write-block",  required_argument, 0, 'w' },
+	{ "write-sector", required_argument, 0, 'b' },
+
+	{ "unprotect",    no_argument,       0, 'u' },
+
+	{ 0, 0, 0, 0 }
+};
+
+static const char *shortOpts = "vhp:Ee:s:Rr:S:Ww:b:u";
+
+
+static void _usage(const char *progName) {
+	PRINTF(("\nUsage: %s", progName));
+
+	struct option *optIt = longOpts;
+
+	do {
+		PRINTF(("  -%c --%s%s", optIt->val, optIt->name, optIt->has_arg ? " <arg>" : ""));
+
+		optIt++;
+	} while (optIt->name != NULL);
+
+	exit(1);
+}
+
+
 int main(int argc, char *argv[]) {
 	int ret = 0;
 
 	do {
-		serial = new_serial(argv[1]);
+		Parameters params;
+
+		memset(&params, 0, sizeof(params));
+
+		{
+			int option;
+			int longIndex;
+
+			while ((option = getopt_long(argc, argv, shortOpts, longOpts, &longIndex)) != -1) {
+				switch (option) {
+					case 'h':
+						params.help = true;
+						break;
+
+					case 'p':
+						params.serialPort = strdup(optarg);
+						break;
+
+					case 'o':
+						params.outputFile = strdup(optarg);
+						break;
+
+					case 'i':
+						params.inputFile = strdup(optarg);
+						break;
+
+					case 's':
+						params.eraseSector    = true;
+						params.eraseSectorIdx = atoi(optarg);
+						break;
+
+					case 'e':
+						params.eraseBlock    = true;
+						params.eraseBlockIdx = atoi(optarg);
+						break;
+
+					case 'E':
+						params.erase = true;
+						break;
+
+					case 'S':
+						params.readSector    = true;
+						params.readSectorIdx = atoi(optarg);
+						break;
+
+					case 'r':
+						params.readBlock    = true;
+						params.readBlockIdx = atoi(optarg);
+						break;
+
+					case 'R':
+						params.read = true;
+						break;
+
+					case 'b':
+						params.writeSector    = true;
+						params.writeSectorIdx = atoi(optarg);
+						break;
+
+					case 'w':
+						params.writeBlock    = true;
+						params.writeBlockIdx = atoi(optarg);
+						break;
+
+					case 'W':
+						params.write = true;
+						break;
+
+					case 'u':
+						params.unprotect = true;
+						break;
+
+					default:
+						params.help = true;
+				}
+			}
+
+			if (params.help) {
+				_usage(argv[0]);
+			}
+
+			if (params.serialPort == NULL) {
+				PRINTF(("Serial port was not provided!"));
+
+				_usage(argv[0]);
+			}
+		}
+
+		serial = new_serial(params.serialPort);
 		if (serial == NULL) {
 			break;
 		}
@@ -488,10 +695,6 @@ int main(int argc, char *argv[]) {
 				break;
 			}
 
-			PRINTF(("Have flash %02x, %02x, %02x of size: %u bytes",
-				info.manufacturerId, info.deviceId[0], info.deviceId[1], 1 << info.deviceId[1]
-			));
-
 			for (int i = 0; i < flashDevicesCount; i++) {
 				const SpiFlashDevice *ip = &flashDevices[i];
 
@@ -507,16 +710,96 @@ int main(int argc, char *argv[]) {
 
 			if (dev == NULL) {
 				ERR(("Unrecognized SPI flash device!"));
-				break;
+
+				unknownDevice.id[0] = info.manufacturerId;
+				unknownDevice.id[1] = info.deviceId[0];
+				unknownDevice.id[2] = info.deviceId[1];
+
+				dev = &unknownDevice;
 			}
+
+			PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdkB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
+				dev->name, dev->id[0], dev->id[1], dev->id[2],
+				dev->blockCount * dev->blockSize, dev->blockCount, dev->blockSize / 1024,
+				dev->sectorCount, dev->sectorSize
+			));
 
 			if (! _spiFlashGetStatus(&status)) {
 				break;
 			}
 
-			PRINTF(("Status: BP0: %u, BP1: %u, SRWD: %u, WEL: %u, WIP: %u",
-				status.bp0, status.bp1, status.srWriteDisable, status.writeEnableLatch, status.writeInProgress
-			));
+			DBG(("status reg: %02x", status.raw));
+
+			if ((status.raw & dev->protectMask) != 0) {
+				PRINTF(("Flash is protected!"));
+			}
+
+			if (params.unprotect) {
+				if (dev->protectMask == 0) {
+					PRINTF(("Unprotect requested but device do not support it!"));
+					break;
+				}
+
+				PRINTF(("Unprotecting flash"));
+
+				status.raw &= ~dev->protectMask;
+
+				if (! _spiFlashWriteEnable()) {
+					break;
+				}
+
+				if (! _spiFlashWriteStatusRegister(&status)) {
+					break;
+				}
+
+				if (! _spiFlashWriteWait(&status, 100)) {
+					break;
+				}
+
+				if ((status.raw & dev->protectMask) != 0) {
+					PRINTF(("Cannot unprotect the device!"));
+
+					break;
+				}
+
+				PRINTF(("Flash unprotected"));
+			}
+
+			if (params.erase) {
+				PRINTF(("NOT IMPLEMENTED"));
+				break;
+
+			} else {
+				if (params.eraseBlock) {
+					if (! _spiFlashBlockErase(params.eraseBlockIdx * dev->blockSize)) {
+						break;
+					}
+				}
+
+				if (params.eraseSector) {
+					PRINTF(("NOT IMPLEMENTED"));
+					break;
+				}
+			}
+
+			if (params.read) {
+				PRINTF(("NOT IMPLEMENTED"));
+				break;
+
+			} else if (params.readBlock) {
+				uint8_t buffer[dev->blockSize];
+				size_t  bufferWritten;
+
+				if (! _spiFlashRead(params.readBlockIdx * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
+					break;
+				}
+
+				debug_dumpBuffer(buffer, dev->blockSize, 32, 0);
+
+			} else if (params.readSector) {
+				PRINTF(("NOT IMPLEMENTED"));
+				break;
+			}
 
 #if 0
 			{
@@ -577,7 +860,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 #endif
-#if 1
+#if 0
 			// Erase chip
 			{
 				if (! _spiFlashGetStatus(&status)) {
@@ -611,7 +894,7 @@ int main(int argc, char *argv[]) {
 				} while (status.writeInProgress);
 			}
 #endif
-#if 1
+#if 0
 			{
 				size_t  flashSize = 8192;//dev->blockCount * dev->blockSize;
 				uint8_t flashData[flashSize];
