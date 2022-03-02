@@ -10,26 +10,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include <ctype.h>
-
-#include <sys/select.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <termios.h>
-
+#include <getopt.h>
 
 #include "protocol.h"
-
-
-#define ERR(x) { printf("[ERR %s:%d]: ", __FUNCTION__, __LINE__); printf x; printf("\r\n"); }
-#define DBG(x) { printf("[DBG %s:%d]: ", __FUNCTION__, __LINE__); printf x; printf("\r\n"); }
-#define PRINTF(x) { printf x; printf("\n"); }
+#include "serial.h"
+#include "debug.h"
 
 #define TIMEOUT_MS 1000
-
-static int _fd = -1;
 
 
 typedef struct _SpiFlashDevice {
@@ -69,6 +57,9 @@ static const SpiFlashDevice flashDevices[] = {
 static const int flashDevicesCount = sizeof(flashDevices) / sizeof(flashDevices[0]);
 
 
+static Serial *serial;
+
+
 uint8_t crc8_getForByte(uint8_t byte, uint8_t polynomial, uint8_t start) {
 	uint8_t remainder = start;
 
@@ -105,104 +96,6 @@ uint8_t crc8_get(uint8_t *buffer, uint16_t bufferSize, uint8_t polynomial, uint8
 }
 
 
-void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength, uint32_t offset) {
-	uint32_t i;
-
-	char asciiBuffer[lineLength + 1];
-
-	for (i = 0; i < bufferSize; i++) {
-		if (i % lineLength == 0) {
-			if (i != 0) {
-				printf("  %s\n", asciiBuffer);
-			}
-
-			printf("%04x:  ", i + offset);
-		}
-
-		printf(" %02x", buffer[i]);
-
-		if (! isprint(buffer[i])) {
-			asciiBuffer[i % lineLength] = '.';
-		} else {
-			asciiBuffer[i % lineLength] = buffer[i];
-		}
-
-		asciiBuffer[(i % lineLength) + 1] = '\0';
-	}
-
-	while ((i % 16) != 0) {
-		printf("   ");
-		i++;
-	}
-
-	printf("  %s\n", asciiBuffer);
-}
-
-
-bool _serialSelect(bool read, uint32_t _timeout) {
-	bool ret = false;
-
-	{
-		fd_set set;
-		struct timeval timeout;
-
-		FD_ZERO(&set);
-		FD_SET(_fd, &set);
-
-		timeout.tv_sec  = _timeout / 1000;
-		timeout.tv_usec = (_timeout % 1000) * 1000;
-
-		int selectRet = select(_fd + 1, read ? &set : NULL, read ? NULL : &set, NULL, &timeout);
-		if (selectRet > 0) {
-			if (FD_ISSET(_fd, &set)) {
-				ret = true;
-			}
-		}
-	}
-
-	return ret;
-}
-
-
-bool _serialGet(uint8_t *byte) {
-	bool ret = false;
-
-	do {
-		if (
-			! _serialSelect(true, TIMEOUT_MS) ||
-			read(_fd, byte, 1) != 1
-		) {
-			ERR(("%s(): Error reading byte! (%m)", __func__));
-			break;
-		}
-
-		ret = true;
-	} while (0);
-
-	return ret;
-}
-
-
-bool _serialWrite(uint8_t *buffer, uint32_t bufferSize) {
-	bool ret = false;
-
-	do {
-		if (! _serialSelect(false, TIMEOUT_MS)) {
-			break;
-		}
-
-		if (write(_fd, buffer, bufferSize) != bufferSize) {
-			DBG(("%s(): Error writing data!", __func__));
-			break;
-		}
-
-		ret = true;
-	} while (0);
-
-	return ret;
-}
-
-
 bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
 	bool ret = true;
 
@@ -227,7 +120,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 
 			txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
 
-			ret = _serialWrite(txData, txDataSize);
+			ret = serial->write(serial, txData, txDataSize, TIMEOUT_MS);
 			if (! ret) {
 				break;
 			}
@@ -240,7 +133,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 
 			// sync
 			{
-				ret = _serialGet(&tmp);
+				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
 				if (! ret) {
 					break;
 				}
@@ -256,7 +149,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 
 			// code
 			{
-				ret = _serialGet(&tmp);
+				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
 				if (! ret) {
 					break;
 				}
@@ -273,7 +166,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 				uint16_t dataLen = 0;
 
 				for (int i = 0; i < 2; i++) {
-					ret = _serialGet(&tmp);
+					ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
 					if (! ret) {
 						break;
 					}
@@ -289,7 +182,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 
 				// Data
 				for (uint16_t i = 0; i < dataLen; i++) {
-					ret = _serialGet(&tmp);
+					ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
 					if (! ret) {
 						break;
 					}
@@ -314,7 +207,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 
 			// CRC
 			{
-				ret = _serialGet(&tmp);
+				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
 				if (! ret) {
 					break;
 				}
@@ -598,51 +491,10 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 
 
 int main(int argc, char *argv[]) {
-	const char *ttyPath = argv[1];
+	int ret = 0;
 
 	do {
-		_fd = open(ttyPath, O_RDWR | O_NOCTTY | O_NONBLOCK);
-		if (_fd < 0) {
-			PRINTF(("Unable to open rfcomm device %s (%m)", argv[1]));
-			break;
-		}
-
-		{
-			struct termios options;
-			int opRet = 0;
-
-			memset(&options, 0, sizeof(options));
-
-			opRet = tcgetattr(_fd, &options);
-			if (opRet != 0) {
-				break;
-			}
-
-			cfmakeraw(&options);
-			cfsetospeed(&options, B38400);
-			cfsetispeed(&options, B38400);
-
-			options.c_cflag |= (CLOCAL | CREAD);
-			options.c_cflag &= ~PARENB;
-			options.c_cflag &= ~CSTOPB;
-			options.c_cflag &= ~HUPCL; // Lower modem control lines after last process closes the device - prevent form arduino reset on next call
-			options.c_cflag &= ~CSIZE;
-			options.c_cflag |= CS8;
-			options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-			options.c_oflag &= ~OPOST;
-
-			options.c_cc[VMIN]  = 1;
-			options.c_cc[VTIME] = 0;
-
-			opRet = tcsetattr(_fd, TCSANOW, &options);
-			if (opRet != 0) {
-				break;
-			}
-
-			tcflush(_fd, TCIOFLUSH);
-		}
-
-		PRINTF(("Device %s opened!", ttyPath));
+		serial = new_serial(argv[1]);
 
 		{
 			const SpiFlashDevice *dev = NULL;
@@ -812,5 +664,7 @@ int main(int argc, char *argv[]) {
 		}
 	} while (0);
 
-	return 0;
+	free(serial);
+
+	return ret;
 }
