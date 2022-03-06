@@ -106,7 +106,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 
 			txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
 
-			debug_dumpBuffer(txData, txDataSize, 32, 0);
+//			debug_dumpBuffer(txData, txDataSize, 32, 0);
 
 			ret = serial->write(serial, txData, txDataSize, TIMEOUT_MS);
 			if (! ret) {
@@ -406,6 +406,8 @@ static bool _spiFlashChipErase() {
 static bool _spiFlashBlockErase(uint32_t address) {
 	bool ret = true;
 
+	PRINTF(("Erasign block at address: %08x", address));
+
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -454,13 +456,47 @@ static bool _spiFlashWriteWait(SpiFlashStatus *status, int timeIntervalMs) {
 }
 
 
-#define SECTOR_SIZE 256
+#define PAGE_SIZE 256
+
+
+bool _spiFlashPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
+	bool ret = true;
+
+	PRINTF(("Writing page at address: %08x", address));
+
+	ret = _spiCs(false);
+	if (ret) {
+		do {
+			uint8_t tx[4 + bufferSize];
+
+			tx[0] = 0x02; // PP
+			tx[1] = (address >> 16) & 0xff;
+			tx[2] = (address >>  8) & 0xff;
+			tx[3] = (address >>  0) & 0xff;
+
+			memcpy(tx + 4, buffer, bufferSize);
+
+			ret = _spiTransfer(tx, 4 + bufferSize, NULL, 0, NULL);
+			if (! ret) {
+				break;
+			}
+		} while (0);
+
+		if (! _spiCs(true)) {
+			ret = false;
+		}
+	}
+
+	return ret;
+}
 
 
 bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t *bufferWritten) {
 	bool ret = true;
 
 	*bufferWritten = 0;
+
+	DBG(("Reading %u bytes from address: %08x", bufferSize, address));
 
 	ret = _spiCs(false);
 	if (ret) {
@@ -479,13 +515,11 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 				}
 			}
 
-			uint8_t rx[SECTOR_SIZE];
+			uint8_t rx[PAGE_SIZE];
 			size_t rxWritten;
 
 			while (bufferSize > 0) {
-				uint16_t toRead = bufferSize >= SECTOR_SIZE ? SECTOR_SIZE : SECTOR_SIZE - bufferSize;
-
-				DBG(("Reading %u bytes", toRead));
+				uint16_t toRead = bufferSize >= PAGE_SIZE ? PAGE_SIZE : PAGE_SIZE - bufferSize;
 
 				ret = _spiTransfer(NULL, 0, rx, toRead, &rxWritten);
 				if (! ret) {
@@ -677,6 +711,24 @@ int main(int argc, char *argv[]) {
 
 				_usage(argv[0]);
 			}
+
+			if (params.outputFile != NULL) {
+				if (strcmp(params.outputFile, "-") == 0) {
+					params.outputFd = stdout;
+
+				} else {
+					params.outputFd = fopen(params.outputFile, "w");
+				}
+			}
+
+			if (params.inputFile != NULL) {
+				if (strcmp(params.inputFile, "-") == 0) {
+					params.inputFd = stdin;
+
+				} else {
+					params.inputFd = fopen(params.inputFile, "r");
+				}
+			}
 		}
 
 		serial = new_serial(params.serialPort);
@@ -745,41 +797,63 @@ int main(int argc, char *argv[]) {
 			if (params.unprotect) {
 				if (dev->protectMask == 0) {
 					PRINTF(("Unprotect requested but device do not support it!"));
-					break;
+
+				} else if ((dev->protectMask & status.raw) == 0) {
+					PRINTF(("Chip is already unprotected!"));
+
+				} else {
+					PRINTF(("Unprotecting flash"));
+
+					status.raw &= ~dev->protectMask;
+
+					if (! _spiFlashWriteEnable()) {
+						break;
+					}
+
+					if (! _spiFlashWriteStatusRegister(&status)) {
+						break;
+					}
+
+					if (! _spiFlashWriteWait(&status, 100)) {
+						break;
+					}
+
+					if ((status.raw & dev->protectMask) != 0) {
+						PRINTF(("Cannot unprotect the device!"));
+
+						break;
+					}
+
+					PRINTF(("Flash unprotected"));
 				}
-
-				PRINTF(("Unprotecting flash"));
-
-				status.raw &= ~dev->protectMask;
-
-				if (! _spiFlashWriteEnable()) {
-					break;
-				}
-
-				if (! _spiFlashWriteStatusRegister(&status)) {
-					break;
-				}
-
-				if (! _spiFlashWriteWait(&status, 100)) {
-					break;
-				}
-
-				if ((status.raw & dev->protectMask) != 0) {
-					PRINTF(("Cannot unprotect the device!"));
-
-					break;
-				}
-
-				PRINTF(("Flash unprotected"));
 			}
 
 			if (params.erase) {
-				PRINTF(("NOT IMPLEMENTED"));
-				break;
+				for (int block = 0; block < dev->blockCount; block++) {
+					if (! _spiFlashWriteEnable()) {
+						break;
+					}
+
+					if (! _spiFlashBlockErase(block * dev->blockSize)) {
+						break;
+					}
+
+					if (! _spiFlashWriteWait(&status, 100)) {
+						break;
+					}
+				}
 
 			} else {
 				if (params.eraseBlock) {
+					if (! _spiFlashWriteEnable()) {
+						break;
+					}
+
 					if (! _spiFlashBlockErase(params.eraseBlockIdx * dev->blockSize)) {
+						break;
+					}
+
+					if (! _spiFlashWriteWait(&status, 100)) {
 						break;
 					}
 				}
@@ -790,8 +864,56 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
-			if (params.read) {
+			if (params.write) {
+				uint8_t pageBuffer[PAGE_SIZE];
+				size_t  pageWritten;
+				uint32_t address = 0;
+
+				do {
+					pageWritten = fread(pageBuffer, 1, sizeof(pageBuffer), params.inputFd);
+					if (pageWritten > 0) {
+						if (! _spiFlashWriteEnable()) {
+							break;
+						}
+
+						if (! _spiFlashPageWrite(address, pageBuffer, pageWritten)) {
+							break;
+						}
+
+						if (! _spiFlashWriteWait(&status, 100)) {
+							break;
+						}
+
+						address += pageWritten;
+					}
+				} while (pageWritten > 0);
+
+			} else if (params.writeBlock) {
 				PRINTF(("NOT IMPLEMENTED"));
+
+			} else if (params.writeSector) {
+				PRINTF(("NOT IMPLEMENTED"));
+			}
+
+			if (params.read) {
+				{
+					size_t   flashImageSize    = dev->blockSize * dev->blockCount;
+					size_t   flashImageWritten = 0;
+					uint8_t *flashImage        = NULL;
+
+					if (flashImageSize == 0) {
+						PRINTF(("Flash size is unknown!"));
+						break;
+					}
+
+					flashImage = malloc(flashImageSize);
+
+					if (_spiFlashRead(0, flashImage, flashImageSize, &flashImageWritten)) {
+						fwrite(flashImage, 1, flashImageWritten, params.outputFd);
+					}
+
+					free(flashImage);
+				}
 				break;
 
 			} else if (params.readBlock) {
@@ -802,7 +924,7 @@ int main(int argc, char *argv[]) {
 					break;
 				}
 
-				debug_dumpBuffer(buffer, dev->blockSize, 32, 0);
+				fwrite(buffer, 1, bufferWritten, params.outputFd);
 
 			} else if (params.readSector) {
 				PRINTF(("NOT IMPLEMENTED"));

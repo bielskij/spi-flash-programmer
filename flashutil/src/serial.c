@@ -113,8 +113,8 @@ Serial *new_serial(const char *serialPath) {
 			}
 
 			cfmakeraw(&options);
-			cfsetospeed(&options, B38400);
-			cfsetispeed(&options, B38400);
+			cfsetospeed(&options, B1000000);
+			cfsetispeed(&options, B1000000);
 
 			options.c_cflag |= (CLOCAL | CREAD);
 			options.c_cflag &= ~PARENB;

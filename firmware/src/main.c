@@ -35,7 +35,7 @@
  * UART
  */
 
-#define UART_BAUD 38400
+#define UART_BAUD 1000000//38400
 #define UART_BAUD_REG (((F_CPU / 16) / UART_BAUD) - 1)
 
 #define _waitForTransmit() while (! (UCSR0A & _BV(UDRE0)));
@@ -123,7 +123,7 @@ void spi_transfer(uint8_t *buffer, uint16_t txSize, uint16_t rxSize) {
 }
 
 
-#define SPI_BUFFER_SIZE 256
+#define SPI_BUFFER_SIZE 288
 
 static uint8_t  _spiBuffer[SPI_BUFFER_SIZE];
 static uint16_t _spiBufferWritten;
