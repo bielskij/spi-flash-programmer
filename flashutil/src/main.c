@@ -58,6 +58,14 @@ static const SpiFlashDevice flashDevices[] = {
 		"Macronix MX25L2026E/MX25l2005A",
 
 		INFO(0xc22012, 0, KB(64), 4, KB(4), 64, 0x8c)
+	},
+	{
+		"Winbond W25Q32",
+		INFO(0xef4016, 0, KB(64), 64, KB(4), 1024, 0xfc)
+	},
+	{
+		"GigaDevice W25Q80",
+		INFO(0xc84014, 0, KB(64), 16, KB(4), 255, 0x7c)
 	}
 };
 
