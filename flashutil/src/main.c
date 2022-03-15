@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <time.h>
 
 #include "crc8.h"
 #include "protocol.h"
@@ -56,7 +57,6 @@ typedef struct _SpiFlashDevice {
 static const SpiFlashDevice flashDevices[] = {
 	{
 		"Macronix MX25L2026E/MX25l2005A",
-
 		INFO(0xc22012, 0, KB(64), 4, KB(4), 64, 0x8c)
 	},
 	{
@@ -377,7 +377,7 @@ static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
 	return ret;
 }
 
-
+#if 0
 static bool _spiFlashChipErase() {
 	bool ret = true;
 
@@ -401,6 +401,7 @@ static bool _spiFlashChipErase() {
 
 	return ret;
 }
+#endif
 
 
 static bool _spiFlashBlockErase(uint32_t address) {
@@ -496,7 +497,7 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 
 	*bufferWritten = 0;
 
-	DBG(("Reading %u bytes from address: %08x", bufferSize, address));
+	DBG(("Reading %lu bytes from address: %08x", bufferSize, address));
 
 	ret = _spiCs(false);
 	if (ret) {
@@ -557,23 +558,15 @@ typedef struct _Parameters {
 	FILE *inputFd;
 	FILE *outputFd;
 
-	bool erase;
-	bool eraseBlock;
-	int  eraseBlockIdx;
-	bool eraseSector;
-	int  eraseSectorIdx;
+	int idx;
 
 	bool read;
 	bool readBlock;
-	int  readBlockIdx;
 	bool readSector;
-	int  readSectorIdx;
 
+	bool erase;
 	bool write;
-	bool writeBlock;
-	int  writeBlockIdx;
-	bool writeSector;
-	int  writeSectorIdx;
+	bool verify;
 
 	bool unprotect;
 } Parameters;
@@ -586,17 +579,13 @@ static struct option longOpts[] = {
 	{ "output",       required_argument, 0, 'o' },
 	{ "input",        required_argument, 0, 'i' },
 
-	{ "erase",        no_argument,       0, 'E' },
-	{ "erase-block",  required_argument, 0, 'e' },
-	{ "erase-sector", required_argument, 0, 's' },
-
 	{ "read",         no_argument,       0, 'R' },
 	{ "read-block",   required_argument, 0, 'r' },
 	{ "read-sector",  required_argument, 0, 'S' },
 
+	{ "erase",        no_argument,       0, 'E' },
 	{ "write",        no_argument,       0, 'W' },
-	{ "write-block",  required_argument, 0, 'w' },
-	{ "write-sector", required_argument, 0, 'b' },
+	{ "verify",       no_argument,       0, 'V' },
 
 	{ "unprotect",    no_argument,       0, 'u' },
 
@@ -651,46 +640,30 @@ int main(int argc, char *argv[]) {
 						params.inputFile = strdup(optarg);
 						break;
 
-					case 's':
-						params.eraseSector    = true;
-						params.eraseSectorIdx = atoi(optarg);
-						break;
-
-					case 'e':
-						params.eraseBlock    = true;
-						params.eraseBlockIdx = atoi(optarg);
-						break;
-
 					case 'E':
 						params.erase = true;
 						break;
 
 					case 'S':
-						params.readSector    = true;
-						params.readSectorIdx = atoi(optarg);
+						params.readSector = true;
+						params.idx        = atoi(optarg);
 						break;
 
 					case 'r':
-						params.readBlock    = true;
-						params.readBlockIdx = atoi(optarg);
+						params.readBlock = true;
+						params.idx       = atoi(optarg);
 						break;
 
 					case 'R':
 						params.read = true;
 						break;
 
-					case 'b':
-						params.writeSector    = true;
-						params.writeSectorIdx = atoi(optarg);
-						break;
-
-					case 'w':
-						params.writeBlock    = true;
-						params.writeBlockIdx = atoi(optarg);
-						break;
-
 					case 'W':
 						params.write = true;
+						break;
+
+					case 'V':
+						params.verify = true;
 						break;
 
 					case 'u':
@@ -718,6 +691,12 @@ int main(int argc, char *argv[]) {
 
 				} else {
 					params.outputFd = fopen(params.outputFile, "w");
+					if (params.outputFd == NULL) {
+						PRINTF(("Unable to open output file! (%s)", params.outputFile));
+
+						ret = 1;
+						break;
+					}
 				}
 			}
 
@@ -727,6 +706,12 @@ int main(int argc, char *argv[]) {
 
 				} else {
 					params.inputFd = fopen(params.inputFile, "r");
+					if (params.inputFd == NULL) {
+						PRINTF(("Unable to open input file! (%s)", params.inputFile));
+
+						ret = 1;
+						break;
+					}
 				}
 			}
 		}
@@ -842,32 +827,19 @@ int main(int argc, char *argv[]) {
 						break;
 					}
 				}
-
-			} else {
-				if (params.eraseBlock) {
-					if (! _spiFlashWriteEnable()) {
-						break;
-					}
-
-					if (! _spiFlashBlockErase(params.eraseBlockIdx * dev->blockSize)) {
-						break;
-					}
-
-					if (! _spiFlashWriteWait(&status, 100)) {
-						break;
-					}
-				}
-
-				if (params.eraseSector) {
-					PRINTF(("NOT IMPLEMENTED"));
-					break;
-				}
 			}
 
 			if (params.write) {
 				uint8_t pageBuffer[PAGE_SIZE];
 				size_t  pageWritten;
 				uint32_t address = 0;
+
+				if (params.inputFd == NULL) {
+					PRINTF(("Writing requested but input file was not defined!"));
+
+					ret = 1;
+					break;
+				}
 
 				do {
 					pageWritten = fread(pageBuffer, 1, sizeof(pageBuffer), params.inputFd);
@@ -887,166 +859,95 @@ int main(int argc, char *argv[]) {
 						address += pageWritten;
 					}
 				} while (pageWritten > 0);
+			}
 
-			} else if (params.writeBlock) {
-				PRINTF(("NOT IMPLEMENTED"));
+			if (params.read || params.readBlock || params.readSector) {
+				if (params.outputFd == NULL) {
+					PRINTF(("Reading requested but output file was not defined!"));
 
-			} else if (params.writeSector) {
-				PRINTF(("NOT IMPLEMENTED"));
+					ret = 1;
+					break;
+				}
 			}
 
 			if (params.read) {
-				{
-					size_t   flashImageSize    = dev->blockSize * dev->blockCount;
-					size_t   flashImageWritten = 0;
-					uint8_t *flashImage        = NULL;
+				size_t   flashImageSize    = dev->blockSize * dev->blockCount;
+				size_t   flashImageWritten = 0;
+				uint8_t *flashImage        = NULL;
 
-					if (flashImageSize == 0) {
-						PRINTF(("Flash size is unknown!"));
-						break;
-					}
-
-					flashImage = malloc(flashImageSize);
-
-					if (_spiFlashRead(0, flashImage, flashImageSize, &flashImageWritten)) {
-						fwrite(flashImage, 1, flashImageWritten, params.outputFd);
-					}
-
-					free(flashImage);
+				if (flashImageSize == 0) {
+					PRINTF(("Flash size is unknown!"));
+					break;
 				}
-				break;
+
+				PRINTF(("Reading whole flash"));
+
+				flashImage = malloc(flashImageSize);
+
+				if (_spiFlashRead(0, flashImage, flashImageSize, &flashImageWritten)) {
+					fwrite(flashImage, 1, flashImageWritten, params.outputFd);
+				}
+
+				free(flashImage);
 
 			} else if (params.readBlock) {
 				uint8_t buffer[dev->blockSize];
 				size_t  bufferWritten;
 
-				if (! _spiFlashRead(params.readBlockIdx * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
+				PRINTF(("Reading block %u (%#lx)", params.idx, params.idx * dev->blockSize));
+
+				if (! _spiFlashRead(params.idx * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
 					break;
 				}
 
 				fwrite(buffer, 1, bufferWritten, params.outputFd);
 
 			} else if (params.readSector) {
-				PRINTF(("NOT IMPLEMENTED"));
-				break;
-			}
+				uint8_t buffer[dev->sectorSize];
+				size_t  bufferWritten;
 
-#if 0
-			{
-				size_t  flashSize = dev->blockCount * dev->blockSize;
-				uint8_t flashData[flashSize];
-				size_t  flashWritten;
+				PRINTF(("Reading sector %u (%#lx)", params.idx, params.idx * dev->sectorSize));
 
-				memset(flashData, 0, flashSize);
-
-				if (! _spiFlashRead(0, flashData, flashSize, &flashWritten)) {
+				if (! _spiFlashRead(params.idx * dev->sectorSize, buffer, dev->sectorSize, &bufferWritten)) {
 					break;
 				}
 
-				debug_dumpBuffer(flashData, 8192, 32, 0);
+				fwrite(buffer, 1, bufferWritten, params.outputFd);
+			}
 
-				{
-					FILE *bin = fopen("/tmp/data.bin", "w");
-					if (bin != NULL) {
-						fwrite(flashData, 1, flashSize, bin);
-						fclose(bin);
+			if (params.verify) {
+				uint8_t referenceBuffer[dev->blockSize];
+				uint8_t buffer[dev->blockSize];
+				size_t  bufferWritten;
+				int     blockNo = 0;
+
+				memset(referenceBuffer, 0xff, dev->blockSize);
+
+				while (blockNo < dev->blockCount) {
+					PRINTF(("Verifying block %d", blockNo));
+
+					if (params.write) {
+						fread(referenceBuffer, 1, dev->blockSize, params.inputFd);
 					}
-				}
-			}
-#endif
 
-#if 0
-			// Disable write protection
-			{
-				if (! _spiFlashGetStatus(&status)) {
-					break;
-				}
-
-				if (status.srWriteDisable || status.bp0 || status.bp1) {
-					DBG(("Disabling Write protection"));
-
-					if (! _spiFlashWriteEnable()) {
-						ERR(("Unable to write enable"));
+					if (! _spiFlashRead(blockNo * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
+						ret = 1;
 						break;
 					}
 
-					status.srWriteDisable = false;
-					status.bp0            = false;
-					status.bp1            = false;
+					if (memcmp(buffer, referenceBuffer, dev->blockSize) != 0) {
+						PRINTF(("Verification of block %d -> SUCCESS", blockNo));
 
-					if (! _spiFlashWriteStatusRegister(&status)) {
-						ERR(("Unable to write status register!"));
+					} else {
+						PRINTF(("Verification of block %d -> FAILED", blockNo));
+
+						ret = 1;
 						break;
 					}
 
-					if (! _spiFlashGetStatus(&status)) {
-						break;
-					}
-
-					if (status.srWriteDisable || status.bp0 || status.bp1) {
-						ERR(("Unable to unlock chip!"));
-						break;
-					}
+					blockNo++;
 				}
 			}
-#endif
-#if 0
-			// Erase chip
-			{
-				if (! _spiFlashGetStatus(&status)) {
-					ERR(("Unable to get status"));
-					break;
-				}
-
-				PRINTF(("Status before erase : BP0: %u, BP1: %u, SRWD: %u, WEL: %u, WIP: %u",
-					status.bp0, status.bp1, status.srWriteDisable, status.writeEnableLatch, status.writeInProgress
-				));
-
-				if (! _spiFlashWriteEnable()) {
-					ERR(("Unable to write enable"));
-					break;
-				}
-
-				if (! _spiFlashChipErase()) {
-					ERR(("Unable to erase chip!"));
-					break;
-				}
-
-				do {
-					DBG(("Waiting on write finish"));
-
-					if (! _spiFlashGetStatus(&status)) {
-						ERR(("Unable to get status"));
-						break;
-					}
-
-					sleep(1);
-				} while (status.writeInProgress);
-			}
-#endif
-#if 0
-			{
-				size_t  flashSize = 8192;//dev->blockCount * dev->blockSize;
-				uint8_t flashData[flashSize];
-				size_t  flashWritten;
-
-				memset(flashData, 0, flashSize);
-
-				if (! _spiFlashRead(0, flashData, flashSize, &flashWritten)) {
-					break;
-				}
-
-				debug_dumpBuffer(flashData, 8192, 32, 0);
-
-				{
-					FILE *bin = fopen("/tmp/data.bin", "w");
-					if (bin != NULL) {
-						fwrite(flashData, 1, flashSize, bin);
-						fclose(bin);
-					}
-				}
-			}
-#endif
 		}
 	} while (0);
 
