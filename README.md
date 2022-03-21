@@ -44,19 +44,27 @@ make clean all
 ```
 
 ## Use cases
+  * Print help and exit
+```
+flash-util -h
+```
   * Erase whole chip (without verification)
 ```
-./flash-util -p /dev/ttyUSB0 -E
+flash-util -p /dev/ttyUSB0 -E
 ```
   * Erase whole chip (with verification)
 ```
-./flash-util -p /dev/ttyUSB0 -E -V
+flash-util -p /dev/ttyUSB0 -E -V
 ```
   * Write image to chip (with verification)
 ```
-./flash-util -p /dev/ttyUSB0 -W -i flash_image.bin -V
+flash-util -p /dev/ttyUSB0 -W -i flash_image.bin -V
 ```
   * Read whole chip
 ```
-./flash-util -p /dev/ttyUSB0 -R -o /tmp/flash.bin 
+flash-util -p /dev/ttyUSB0 -R -o /tmp/flash.bin 
+```
+  * Writing image to unknown chip
+```
+flash-util -p /dev/ttyUSB0 -E -V --flash-geometry  65536:64:4096:1024:fc
 ```
