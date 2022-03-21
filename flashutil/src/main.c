@@ -573,26 +573,28 @@ typedef struct _Parameters {
 
 
 static struct option longOpts[] = {
-	{ "verbose",      no_argument,       0, 'v' },
-	{ "help",         no_argument,       0, 'h' },
-	{ "serial",       required_argument, 0, 'p' },
-	{ "output",       required_argument, 0, 'o' },
-	{ "input",        required_argument, 0, 'i' },
+	{ "verbose",        no_argument,       0, 'v' },
+	{ "help",           no_argument,       0, 'h' },
+	{ "serial",         required_argument, 0, 'p' },
+	{ "output",         required_argument, 0, 'o' },
+	{ "input",          required_argument, 0, 'i' },
 
-	{ "read",         no_argument,       0, 'R' },
-	{ "read-block",   required_argument, 0, 'r' },
-	{ "read-sector",  required_argument, 0, 'S' },
+	{ "read",           no_argument,       0, 'R' },
+	{ "read-block",     required_argument, 0, 'r' },
+	{ "read-sector",    required_argument, 0, 'S' },
 
-	{ "erase",        no_argument,       0, 'E' },
-	{ "write",        no_argument,       0, 'W' },
-	{ "verify",       no_argument,       0, 'V' },
+	{ "erase",          no_argument,       0, 'E' },
+	{ "write",          no_argument,       0, 'W' },
+	{ "verify",         no_argument,       0, 'V' },
 
-	{ "unprotect",    no_argument,       0, 'u' },
+	{ "unprotect",      no_argument,       0, 'u' },
+
+	{ "flash-geometry", required_argument, 0, 'g' },
 
 	{ 0, 0, 0, 0 }
 };
 
-static const char *shortOpts = "vhp:Ee:s:Rr:S:Ww:b:u";
+static const char *shortOpts = "vhp:o:i:Rr:S:EWVug:";
 
 
 static void _usage(const char *progName) {
@@ -605,6 +607,12 @@ static void _usage(const char *progName) {
 
 		optIt++;
 	} while (optIt->name != NULL);
+
+	PRINTF(("\nWhere:"));
+	PRINTF(("  flash-geometry <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex>"));
+	PRINTF(("    example: 65536:4:4096:64:8c"));
+	PRINTF(("  input  - can be path to a regular file or '-' for stdin"));
+	PRINTF(("  output - can be path to a regular file or '-' for stdout"));
 
 	exit(1);
 }
@@ -668,6 +676,39 @@ int main(int argc, char *argv[]) {
 
 					case 'u':
 						params.unprotect = true;
+						break;
+
+					case 'g':
+						{
+							int blockCount;
+							int blockSize;
+							int sectorCount;
+							int sectorSize;
+							uint8_t unprotectMask;
+
+							if (sscanf(
+								optarg, "%d:%d:%d:%d:%02hhx",
+								&blockSize, &blockCount,
+								&sectorSize, &sectorCount,
+								&unprotectMask
+							) != 5
+							) {
+								PRINTF(("Invalid flash-geometry syntax!"));
+
+								_usage(argv[0]);
+							}
+
+							unknownDevice.blockCount  = blockCount;
+							unknownDevice.blockSize   = blockSize;
+							unknownDevice.sectorCount = sectorCount;
+							unknownDevice.sectorSize  = sectorSize;
+							unknownDevice.protectMask = unprotectMask;
+
+							if (blockCount * blockSize != sectorCount * sectorSize) {
+								PRINTF(("Invalid flash-geometry, flash size calculated from blocks/sectors differs!"));
+								exit(1);
+							}
+						}
 						break;
 
 					default:
@@ -921,7 +962,12 @@ int main(int argc, char *argv[]) {
 				size_t  bufferWritten;
 				int     blockNo = 0;
 
-				memset(referenceBuffer, 0xff, dev->blockSize);
+				if (params.write) {
+					fseek(params.inputFd, 0, SEEK_SET);
+
+				} else {
+					memset(referenceBuffer, 0xff, dev->blockSize);
+				}
 
 				while (blockNo < dev->blockCount) {
 					PRINTF(("Verifying block %d", blockNo));
@@ -935,7 +981,7 @@ int main(int argc, char *argv[]) {
 						break;
 					}
 
-					if (memcmp(buffer, referenceBuffer, dev->blockSize) != 0) {
+					if (memcmp(buffer, referenceBuffer, dev->blockSize) == 0) {
 						PRINTF(("Verification of block %d -> SUCCESS", blockNo));
 
 					} else {
