@@ -9,6 +9,7 @@ As a result a complete solution was implemented.
     * Predefined chips:
         * MX25L2026E
         * MX25l2005A
+        * MX25V16066
         * W25Q32
         * W25Q80
     * Generic chips
