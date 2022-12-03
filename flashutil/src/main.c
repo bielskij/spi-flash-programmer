@@ -715,6 +715,9 @@ int main(int argc, char *argv[]) {
 						}
 						break;
 
+					case 'v':
+						break;
+
 					default:
 						params.help = true;
 				}

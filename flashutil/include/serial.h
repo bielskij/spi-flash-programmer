@@ -1,6 +1,11 @@
 #ifndef FLASHUTIL_INCLUDE_SERIAL_H_
 #define FLASHUTIL_INCLUDE_SERIAL_H_
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -14,5 +19,8 @@ typedef struct _Serial {
 
 Serial *new_serial(const char *serialPath);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* FLASHUTIL_INCLUDE_SERIAL_H_ */
