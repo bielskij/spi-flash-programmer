@@ -13,10 +13,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#if defined(__unix__)
-#include <unistd.h>
-#endif
-
 #include <boost/program_options.hpp>
 #include <boost/chrono.hpp>
 #include <boost/thread.hpp>

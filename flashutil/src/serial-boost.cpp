@@ -8,7 +8,6 @@
 #include <stdlib.h>
 
 #if defined(__unix__)
-#error asdasd
 #include <fcntl.h>
 #include <termios.h>
 #endif
