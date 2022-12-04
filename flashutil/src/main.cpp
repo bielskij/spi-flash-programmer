@@ -75,6 +75,10 @@ static const std::vector<SpiFlashDevice> flashDevices = {
 		0xc22015, 0, KB(64), 32, KB(4), 512, 0xbc
 	),
 	SpiFlashDevice(
+		"Winbond W25Q16",
+		0xef4015, 0, KB(64), 32, KB(4), 512, 0xfc
+	),
+	SpiFlashDevice(
 		"Winbond W25Q32",
 		0xef4016, 0, KB(64), 64, KB(4), 1024, 0xfc
 	),
