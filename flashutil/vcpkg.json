@@ -2,7 +2,9 @@
 	"name": "external-dependencies",
 	"version-string": "1.0.0",
 	"dependencies": [
-		"boost-asio"
+		"boost-asio",
+		"boost-program-options",
+		"boost-thread"
 	]
 }
 

@@ -4,7 +4,7 @@
 void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength, uint32_t offset) {
 	uint32_t i;
 
-	char asciiBuffer[lineLength + 1];
+	char *asciiBuffer = malloc(lineLength + 1);
 
 	for (i = 0; i < bufferSize; i++) {
 		if (i % lineLength == 0) {
@@ -32,4 +32,6 @@ void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength,
 	}
 
 	printf("  %s\n", asciiBuffer);
+
+	free(asciiBuffer);
 }

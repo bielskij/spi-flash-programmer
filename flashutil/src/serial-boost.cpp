@@ -7,7 +7,8 @@
 
 #include <stdlib.h>
 
-#if ! defined(BOOST_WINDOWS)
+#if defined(__unix__)
+#error asdasd
 #include <fcntl.h>
 #include <termios.h>
 #endif
@@ -21,11 +22,11 @@
 struct SerialImpl {
 	Serial base;
 
-	enum class Result {
-		IN_PROGRESS,
-		SUCCESS,
-		ERROR,
-		TIMEOUT
+	enum Result {
+		RESULT_IN_PROGRESS,
+		RESULT_SUCCESS,
+		RESULT_ERROR,
+		RESULT_TIMEOUT
 	};
 
 	boost::asio::io_service  service;
@@ -38,23 +39,23 @@ struct SerialImpl {
 	SerialImpl(const char *serialPath) : service(), serial(service, serialPath), timeoutTimer(service) {
 		DBG(("CALL"));
 
-		this->readResult = Result::SUCCESS;
+		this->readResult = RESULT_SUCCESS;
 	}
 
 	void onCompleted(const boost::system::error_code &errorCode, const size_t bytesTransferred) {
 		DBG(("CALL, read: %zd bytes", bytesTransferred));
 
 		if (errorCode) {
-			this->readResult = Result::ERROR;
+			this->readResult = RESULT_ERROR;
 
 		} else {
-			this->readResult = Result::SUCCESS;
+			this->readResult = RESULT_SUCCESS;
 		}
 	}
 
 	void onTimedOut(const boost::system::error_code &errorCode) {
-		if (! errorCode && this->readResult == Result::IN_PROGRESS) {
-			this->readResult = Result::TIMEOUT;
+		if (! errorCode && this->readResult == RESULT_IN_PROGRESS) {
+			this->readResult = RESULT_TIMEOUT;
 		}
 	}
 };
@@ -86,7 +87,7 @@ static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 		is.read((char *) value, 1);
 
 	} else {
-		s->readResult = SerialImpl::Result::IN_PROGRESS;
+		s->readResult = SerialImpl::RESULT_IN_PROGRESS;
 
 		boost::asio::async_read(
 			s->serial,
@@ -118,10 +119,10 @@ static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 			s->service.run_one();
 
 			switch (s->readResult) {
-				case SerialImpl::Result::IN_PROGRESS:
+			case SerialImpl::RESULT_IN_PROGRESS:
 					break;
 
-				case SerialImpl::Result::ERROR:
+				case SerialImpl::RESULT_ERROR:
 					{
 						s->timeoutTimer.cancel();
 						s->serial.cancel();
@@ -130,7 +131,7 @@ static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 					}
 					break;
 
-				case SerialImpl::Result::SUCCESS:
+				case SerialImpl::RESULT_SUCCESS:
 					{
 						std::istream is(&s->readBuffer);
 
@@ -140,16 +141,16 @@ static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 					}
 					break;
 
-				case SerialImpl::Result::TIMEOUT:
+				case SerialImpl::RESULT_TIMEOUT:
 					{
 						s->serial.cancel();
 					}
 					break;
 			}
-		} while (s->readResult == SerialImpl::Result::IN_PROGRESS);
+		} while (s->readResult == SerialImpl::RESULT_IN_PROGRESS);
 	}
 
-	return s->readResult == SerialImpl::Result::SUCCESS;
+	return s->readResult == SerialImpl::RESULT_SUCCESS;
 }
 
 

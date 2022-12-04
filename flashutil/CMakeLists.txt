@@ -1,17 +1,19 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.12)
 
 include(cmake/submodules.txt)
 include(cmake/vcpkg.txt)
 
 project(flashutil)
 
-find_package(Boost REQUIRED)
+ set(CMAKE_CXX_STANDARD 11)
+
+find_package(Boost COMPONENTS thread program_options REQUIRED)
 
 
 file(GLOB_RECURSE SRC_FILES 
 	../common/src/crc8.c
 	src/debug.c
-	src/main.c
+	src/main.cpp
 	src/serial-boost.cpp
 )
 
@@ -24,6 +26,6 @@ target_include_directories(flash-util PRIVATE
 	../common/include
 )
 
-target_link_libraries(flash-util PRIVATE
-	Boost::boost
+target_link_libraries(flash-util PUBLIC
+	Boost::thread Boost::program_options
 )
