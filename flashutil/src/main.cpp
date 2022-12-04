@@ -59,6 +59,7 @@ struct SpiFlashDevice {
 		this->sectorSize  = sectorSize;
 		this->sectorCount = sectorCount;
 		this->protectMask = protectMask;
+		this->pageSize    = 256;
 	};
 };
 
