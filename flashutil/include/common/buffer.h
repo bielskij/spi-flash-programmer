@@ -23,6 +23,22 @@ namespace flashutil {
 				std::fill_n(this->_v.begin(), this->_v.size(), value);
 			}
 
+			void reset() {
+				this->_v.clear();
+			}
+
+			void resize(size_t size) {
+				this->_v.reserve(size);
+			}
+
+			uint8_t &at(size_t index) {
+				return this->_v.at(index);
+			}
+
+			uint8_t &operator[](size_t index) {
+				return _v[index];
+			}
+
 		private:
 			std::vector<uint8_t> _v;
 	};

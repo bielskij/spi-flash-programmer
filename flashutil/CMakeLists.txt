@@ -13,6 +13,9 @@ find_package(Boost COMPONENTS thread program_options chrono REQUIRED)
 file(GLOB_RECURSE SRC_FILES 
 	../common/src/crc8.c
 	src/common/debug.c
+	src/programmer/spi/impl/serial.cpp
+	src/programmer/spi/commands.cpp
+	src/programmer/spi.cpp
 	src/main.cpp
 	src/serial-boost.cpp
 )

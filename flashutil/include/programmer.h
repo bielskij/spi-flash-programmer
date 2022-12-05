@@ -5,9 +5,25 @@
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef FLASHUTIL_INCLUDE_PROGRAMMER_H_
-#define FLASHUTIL_INCLUDE_PROGRAMMER_H_
+#ifndef PROGRAMMER_H_
+#define PROGRAMMER_H_
+
+#include "programmer/spi/interface.h"
+
+namespace flashutil {
+	class Programmer {
+		public:
+			Programmer(SpiInterface &interface);
+
+		public:
+			bool connect();
+			bool disconnect();
+
+		private:
+			Programmer() = delete;
+			Programmer(const Programmer &) = delete;
+	};
+}
 
 
-
-#endif /* FLASHUTIL_INCLUDE_PROGRAMMER_H_ */
+#endif /* PROGRAMMER_H_ */
