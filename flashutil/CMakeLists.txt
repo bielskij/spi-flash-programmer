@@ -7,7 +7,7 @@ project(flashutil)
 
 set(CMAKE_CXX_STANDARD 14)
 
-find_package(Boost COMPONENTS thread program_options REQUIRED)
+find_package(Boost COMPONENTS thread program_options chrono REQUIRED)
 
 
 file(GLOB_RECURSE SRC_FILES 
@@ -27,5 +27,5 @@ target_include_directories(flash-util PRIVATE
 )
 
 target_link_libraries(flash-util PUBLIC
-	Boost::thread Boost::program_options
+	Boost::thread Boost::program_options Boost::chrono
 )
