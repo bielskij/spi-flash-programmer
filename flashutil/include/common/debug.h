@@ -1,11 +1,11 @@
-#ifndef FLASHUTIL_INCLUDE_DEBUG_H_
-#define FLASHUTIL_INCLUDE_DEBUG_H_
+#ifndef COMMON_DEBUG_H_
+#define COMMON_DEBUG_H_
 
 #include <stdint.h>
 #include <ctype.h>
 #include <stdio.h>
 
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG == 1
 	#define ERR(x) do { printf("[ERR %s:%d]: ", __FUNCTION__, __LINE__); printf x; printf("\r\n"); } while (0)
@@ -23,4 +23,4 @@
 
 void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength, uint32_t offset);
 
-#endif /* FLASHUTIL_INCLUDE_DEBUG_H_ */
+#endif /* COMMON_DEBUG_H_ */

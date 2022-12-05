@@ -12,7 +12,7 @@ find_package(Boost COMPONENTS thread program_options chrono REQUIRED)
 
 file(GLOB_RECURSE SRC_FILES 
 	../common/src/crc8.c
-	src/debug.c
+	src/common/debug.c
 	src/main.cpp
 	src/serial-boost.cpp
 )

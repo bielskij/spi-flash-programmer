@@ -20,48 +20,11 @@
 #include "crc8.h"
 #include "protocol.h"
 #include "serial.h"
-#include "debug.h"
+#include "SpiFlashDevice.h"
+
+#include "common/debug.h"
 
 #define TIMEOUT_MS 1000
-
-
-struct SpiFlashDevice {
-	std::string name;
-	uint8_t id[5];
-	char    idLen;
-	size_t  blockSize;
-	size_t  blockCount;
-	size_t  sectorSize;
-	size_t  sectorCount;
-	size_t  pageSize;
-	uint8_t protectMask;
-
-	SpiFlashDevice(const std::string &name, uint32_t jedecId, uint16_t extId, size_t blockSize, size_t blockCount, size_t sectorSize, size_t sectorCount, uint8_t protectMask) : name(name) {
-		this->id[0] = (jedecId >> 16) & 0xff;
-		this->id[1] = (jedecId >>  8) & 0xff;
-		this->id[2] = (jedecId >>  0) & 0xff;
-		this->id[3] = (extId >> 8) & 0xff;
-		this->id[4] = (extId >> 0) & 0xff;
-
-		if (jedecId == 0) {
-			this->idLen = 0;
-		
-		} else {
-			this->idLen = 3;
-
-			if (extId != 0) {
-				this->idLen += 2;
-			}
-		}
-
-		this->blockSize   = blockSize;
-		this->blockCount  = blockCount;
-		this->sectorSize  = sectorSize;
-		this->sectorCount = sectorCount;
-		this->protectMask = protectMask;
-		this->pageSize    = 256;
-	};
-};
 
 #define KB(_x)(1024 * _x)
 
@@ -89,9 +52,7 @@ static const std::vector<SpiFlashDevice> flashDevices = {
 };
 
 static SpiFlashDevice unknownDevice(
-	"Unknown SPI flash chip",
-
-	0, 0, 0, 0, 0, 0, 0
+	"Unknown SPI flash chip"
 );
 
 
@@ -231,8 +192,7 @@ bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response,
 
 
 typedef struct _SpiFlashInfo {
-	uint8_t manufacturerId;
-	uint8_t deviceId[2];
+	uint8_t jedecId[3];
 } SpiFlashInfo;
 
 
@@ -285,9 +245,9 @@ bool _spiFlashGetInfo(SpiFlashInfo *info) {
 				break;
 			}
 
-			info->manufacturerId = rx[1];
-			info->deviceId[0]    = rx[2];
-			info->deviceId[1]    = rx[3];
+			info->jedecId[0] = rx[1];
+			info->jedecId[1] = rx[2];
+			info->jedecId[2] = rx[3];
 		} while (0);
 
 		if (! _spiCs(true)) {
@@ -753,16 +713,15 @@ int main(int argc, char *argv[]) {
 					_usage(opDesc);
 				}
 
-				unknownDevice.blockCount  = blockCount;
-				unknownDevice.blockSize   = blockSize;
-				unknownDevice.sectorCount = sectorCount;
-				unknownDevice.sectorSize  = sectorSize;
-				unknownDevice.protectMask = unprotectMask;
-
 				if (blockCount * blockSize != sectorCount * sectorSize) {
 					PRINTF(("Invalid flash-geometry, flash size calculated from blocks/sectors differs!"));
 					exit(1);
 				}
+
+				unknownDevice = SpiFlashDevice(
+					unknownDevice.getName(), unknownDevice.getId().getJedecId(), unknownDevice.getId().getExtendedId(),
+					blockSize, blockCount, sectorSize, sectorCount, unprotectMask
+				);
 			}
 		}
 
@@ -781,22 +740,16 @@ int main(int argc, char *argv[]) {
 				break;
 			}
 
-			if (
-				((info.deviceId[0] == 0xff) && (info.deviceId[0] == 0xff) && (info.manufacturerId == 0xff)) ||
-				((info.deviceId[0] == 0x00) && (info.deviceId[0] == 0x00) && (info.manufacturerId == 0x00))
-			) {
+			SpiFlashDevice::Id id(info.jedecId, nullptr);
+
+			if (id.isNull()) {
 				PRINTF(("No flash device detected!"));
 
 				break;
 			}
 
 			for (auto &chip : flashDevices) {
-				if (
-					(chip.id[0] == info.manufacturerId) &&
-					(chip.id[1] == info.deviceId[0]) &&
-					(chip.id[2] == info.deviceId[1])
-				) {
-					dev = &chip;
+				if (chip.getId() == id) {
 					break;
 				}
 			}
@@ -804,17 +757,15 @@ int main(int argc, char *argv[]) {
 			if (dev == NULL) {
 				ERR(("Unrecognized SPI flash device!"));
 
-				unknownDevice.id[0] = info.manufacturerId;
-				unknownDevice.id[1] = info.deviceId[0];
-				unknownDevice.id[2] = info.deviceId[1];
+				unknownDevice.setId(SpiFlashDevice::Id(info.jedecId, nullptr));
 
 				dev = &unknownDevice;
 			}
 
 			PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdkB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
-				dev->name, dev->id[0], dev->id[1], dev->id[2],
-				dev->blockCount * dev->blockSize, dev->blockCount, dev->blockSize / 1024,
-				dev->sectorCount, dev->sectorSize
+				dev->getName(), info.jedecId[0], info.jedecId[1], info.jedecId[2],
+				dev->getBlockCount() * dev->getBlockSize(), dev->getBlockCount(), dev->getBlockSize() / 1024,
+				dev->getSectorCount(), dev->getSectorSize()
 			));
 
 			if (! _spiFlashGetStatus(&status)) {
@@ -823,21 +774,21 @@ int main(int argc, char *argv[]) {
 
 			DBG(("status reg: %02x", status.raw));
 
-			if ((status.raw & dev->protectMask) != 0) {
+			if ((status.raw & dev->getProtectMask()) != 0) {
 				PRINTF(("Flash is protected!"));
 			}
 
 			if (params.unprotect) {
-				if (dev->protectMask == 0) {
+				if (dev->getProtectMask() == 0) {
 					PRINTF(("Unprotect requested but device do not support it!"));
 
-				} else if ((dev->protectMask & status.raw) == 0) {
+				} else if ((dev->getProtectMask() & status.raw) == 0) {
 					PRINTF(("Chip is already unprotected!"));
 
 				} else {
 					PRINTF(("Unprotecting flash"));
 
-					status.raw &= ~dev->protectMask;
+					status.raw &= ~dev->getProtectMask();
 
 					if (! _spiFlashWriteEnable()) {
 						break;
@@ -851,7 +802,7 @@ int main(int argc, char *argv[]) {
 						break;
 					}
 
-					if ((status.raw & dev->protectMask) != 0) {
+					if ((status.raw & dev->getProtectMask()) != 0) {
 						PRINTF(("Cannot unprotect the device!"));
 
 						break;
@@ -862,12 +813,12 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (params.erase) {
-				for (int block = 0; block < dev->blockCount; block++) {
+				for (int block = 0; block < dev->getBlockCount(); block++) {
 					if (! _spiFlashWriteEnable()) {
 						break;
 					}
 
-					if (! _spiFlashBlockErase(block * dev->blockSize)) {
+					if (! _spiFlashBlockErase(block * dev->getBlockSize())) {
 						break;
 					}
 
@@ -919,7 +870,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (params.read) {
-				size_t   flashImageSize    = dev->blockSize * dev->blockCount;
+				size_t   flashImageSize    = dev->getBlockSize() * dev->getBlockCount();
 				size_t   flashImageWritten = 0;
 				
 				if (flashImageSize == 0) {
@@ -936,24 +887,24 @@ int main(int argc, char *argv[]) {
 				}
 
 			} else if (params.readBlock) {
-				auto    buffer = std::make_unique< uint8_t[]>(dev->blockSize);
+				auto    buffer = std::make_unique< uint8_t[]>(dev->getBlockSize());
 				size_t  bufferWritten;
 
-				PRINTF(("Reading block %u (%#lx)", params.idx, params.idx * dev->blockSize));
+				PRINTF(("Reading block %u (%#lx)", params.idx, params.idx * dev->getBlockSize()));
 
-				if (! _spiFlashRead(params.idx * dev->blockSize, buffer.get(), dev->blockSize, &bufferWritten)) {
+				if (! _spiFlashRead(params.idx * dev->getBlockSize(), buffer.get(), dev->getBlockSize(), &bufferWritten)) {
 					break;
 				}
 
 				fwrite(buffer.get(), 1, bufferWritten, params.outputFd);
 
 			} else if (params.readSector) {
-				auto    buffer = std::make_unique<uint8_t[]>(dev->sectorSize);
+				auto    buffer = std::make_unique<uint8_t[]>(dev->getSectorSize());
 				size_t  bufferWritten;
 
-				PRINTF(("Reading sector %u (%#lx)", params.idx, params.idx * dev->sectorSize));
+				PRINTF(("Reading sector %u (%#lx)", params.idx, params.idx * dev->getSectorSize()));
 
-				if (! _spiFlashRead(params.idx * dev->sectorSize, buffer.get(), dev->sectorSize, &bufferWritten)) {
+				if (! _spiFlashRead(params.idx * dev->getSectorSize(), buffer.get(), dev->getSectorSize(), &bufferWritten)) {
 					break;
 				}
 
@@ -961,8 +912,8 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (params.verify) {
-				auto referenceBuffer = std::make_unique<uint8_t[]>(dev->blockSize);
-				auto buffer = std::make_unique<uint8_t[]>(dev->blockSize);
+				auto referenceBuffer = std::make_unique<uint8_t[]>(dev->getBlockSize());
+				auto buffer = std::make_unique<uint8_t[]>(dev->getBlockSize());
 				size_t  bufferWritten;
 				int     blockNo = 0;
 
@@ -970,22 +921,22 @@ int main(int argc, char *argv[]) {
 					fseek(params.inputFd, 0, SEEK_SET);
 
 				} else {
-					memset(referenceBuffer.get(), 0xff, dev->blockSize);
+					memset(referenceBuffer.get(), 0xff, dev->getBlockSize());
 				}
 
-				while (blockNo < dev->blockCount) {
+				while (blockNo < dev->getBlockCount()) {
 					PRINTF(("Verifying block %d", blockNo));
 
 					if (params.write) {
-						fread(referenceBuffer.get(), 1, dev->blockSize, params.inputFd);
+						fread(referenceBuffer.get(), 1, dev->getBlockSize(), params.inputFd);
 					}
 
-					if (! _spiFlashRead(blockNo * dev->blockSize, buffer.get(), dev->blockSize, &bufferWritten)) {
+					if (! _spiFlashRead(blockNo * dev->getBlockSize(), buffer.get(), dev->getBlockSize(), &bufferWritten)) {
 						ret = 1;
 						break;
 					}
 
-					if (memcmp(buffer.get(), referenceBuffer.get(), dev->blockSize) == 0) {
+					if (memcmp(buffer.get(), referenceBuffer.get(), dev->getBlockSize()) == 0) {
 						PRINTF(("Verification of block %d -> SUCCESS", blockNo));
 
 					} else {

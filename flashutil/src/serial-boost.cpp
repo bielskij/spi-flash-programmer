@@ -16,7 +16,7 @@
 #include <boost/bind.hpp>
 
 #include "serial.h"
-#include "debug.h"
+#include "common/debug.h"
 
 struct SerialImpl {
 	Serial base;
@@ -78,7 +78,7 @@ static bool _opWrite(struct _Serial *self, void *buffer, size_t bufferSize, int 
 static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 	SerialImpl *s = reinterpret_cast<SerialImpl *>(self);
 
-	DBG(("CALL ptr: %p, "));
+	DBG(("CALL ptr: %p, timeout %d", value, timeoutMs));
 
 	if(s->readBuffer.size() > 0) {
 		std::istream is(&s->readBuffer);
@@ -123,6 +123,8 @@ static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 
 				case SerialImpl::RESULT_ERROR:
 					{
+						DBG(("RESULT_ERROR"));
+
 						s->timeoutTimer.cancel();
 						s->serial.cancel();
 
@@ -134,6 +136,8 @@ static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 					{
 						std::istream is(&s->readBuffer);
 
+						DBG(("RESULT_SUCCESS"));
+
 						s->timeoutTimer.cancel();
 
 						is.ignore(1);
@@ -142,6 +146,8 @@ static bool _opReadByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 
 				case SerialImpl::RESULT_TIMEOUT:
 					{
+						DBG(("RESULT_TIMEOUT"));
+
 						s->serial.cancel();
 					}
 					break;
@@ -171,7 +177,7 @@ Serial *new_serial(const char *serialPath) {
 			s.set_option(boost::asio::serial_port::stop_bits(boost::asio::serial_port::stop_bits::one));
 		}
 
-#if ! defined(BOOST_WINDOWS)
+#if defined(__unix__)
 		{
 			int fd = ret->serial.lowest_layer().native_handle();
 
