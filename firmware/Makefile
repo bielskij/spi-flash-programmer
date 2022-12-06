@@ -21,13 +21,14 @@ DIR_OUT := out
 DIR_INC := include
 DIR_SRC := src
 
-F_CPU := 16000000
+F_CPU ?= 16000000
+BAUD  ?=  1000000
 MCU   := atmega328p
 
 CFLAGS := -std=c99 
 CFLAGS += -Wall -Wundef -Warray-bounds -Wformat -Wmissing-braces -Wreturn-type
 CFLAGS += -fshort-enums -fpack-struct  -fno-split-wide-types -ffunction-sections -fdata-sections
-CFLAGS += -mmcu=$(MCU) -DF_CPU=$(F_CPU) -mrelax -O2
+CFLAGS += -mmcu=$(MCU) -DF_CPU=$(F_CPU) -DBAUD=$(BAUD) -mrelax -O2
 
 CFLAGS += -I$(DIR_SRC) -I$(DIR_INC) -I../common/include
 
@@ -43,6 +44,8 @@ SRC := \
 TMP := $(foreach file, $(SRC), $(shell echo $(file) | sed -e 's|$(DIR_SRC)\/|$(DIR_OUT)\/|'))
 OBJ := $(foreach file, $(TMP), $(shell echo $(file) | sed -e 's|\.c$$|.c.o|' | sed -e 's|\.S$$|.S.o|')) 
 
+HEX_FILE ?= $(DIR_OUT)/$(APP_NAME).hex
+
 init:
 	$(MKDIR) -p $(DIR_OUT)
 
@@ -55,8 +58,16 @@ all: init \
 
 	$(SIZE) --format=avr $(DIR_OUT)/$(APP_NAME).elf
 
-burn:
-	avrdude -p m328p -P /dev/ttyUSB0 -c arduino -b57600 -U flash:w:$(DIR_OUT)/$(APP_NAME).hex:i
+burn: burn-arduino
+
+
+burn-arduino:
+	avrdude -p m328p -P /dev/ttyUSB0 -c arduino -b57600 -U flash:w:$(HEX_FILE):i
+
+burn-usbasp:
+	# fuses used for atmega328p
+	# -u -U efuse:w:0xFF:m -U hfuse:w:0xD9:m -U lfuse:w:0xF7:m 
+	avrdude -p m328p -c usbasp -U flash:w:$(HEX_FILE):i
 
 clean:
 	$(RM) -rf $(DIR_OUT)

@@ -21,10 +21,10 @@ As a result a complete solution was implemented.
   * high-speed USART (1Mbaud)
 
 ## Arduino connections.
-  * D10 ------ CS   (chip select)
-  * D11 ------ MOSI (SPI data output)
-  * D12 ------ MISO (SPI data input)
-  * D13 ------ SCK  (SPI clock)
+  * D10 (PB2) ------ CS   (chip select)
+  * D11 (PB3) ------ MOSI (SPI data output)
+  * D12 (PB4) ------ MISO (SPI data input)
+  * D13 (PB5) ------ SCK  (SPI clock)
 
 **NOTE** For communication with 3.3V chips simple resistor voltage divider can be used. In my case voltage divider using 1K and 2K resistors was enough.
 
@@ -36,7 +36,17 @@ As a result a complete solution was implemented.
 cd firmware
 make clean all burn
 ```
-**NOTE** Prebuilt firmware is stored at ``firmware/dist/firmware.hex``
+
+## Writing precompiled images.
+
+**NOTE** Prebuilt firmware is available at ``firmware/dist/firmware_<clk>_<baud>.hex``
+
+```
+cd firmware
+make HEX_FILE=dist/firmware_16mhz_19200bps.hex burn
+```
+
+By default, **burn** target writes the firmware using avrdude via arduino programmer (arduino resistant bootloader). There is an other target **burn-usbasp** for writing firmware to raw atmega328p (USBasp programmer, ISP connection).
 
 ## Building flashutil.
 ```

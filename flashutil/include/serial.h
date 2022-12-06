@@ -12,7 +12,7 @@ typedef struct _Serial {
 } Serial;
 
 
-Serial *new_serial(const char *serialPath);
+Serial *new_serial(const char *serialPath, int baud);
 
 
 #endif /* FLASHUTIL_INCLUDE_SERIAL_H_ */

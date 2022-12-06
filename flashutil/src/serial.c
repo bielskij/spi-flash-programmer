@@ -89,17 +89,17 @@ static bool _readByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 }
 
 
-Serial *new_serial(const char *serialPath) {
-	SerialImpl *ret = malloc(sizeof(*ret));
+Serial *new_serial(const char *serialPath, int baud) {
+	SerialImpl *ret = NULL;
+
+	int fd = -1;
 
 	do {
-		ret->fd = open(serialPath, O_RDWR | O_NOCTTY | O_NONBLOCK);
-		if (ret->fd < 0) {
+		fd = open(serialPath, O_RDWR | O_NOCTTY | O_NONBLOCK);
+		if (fd < 0) {
 			PRINTF(("Unable to open serial device %s (%m)", serialPath));
 			break;
 		}
-
-		PRINTF(("Device %s opened!", serialPath));
 
 		{
 			struct termios options;
@@ -107,14 +107,39 @@ Serial *new_serial(const char *serialPath) {
 
 			memset(&options, 0, sizeof(options));
 
-			opRet = tcgetattr(ret->fd, &options);
+			opRet = tcgetattr(fd, &options);
 			if (opRet != 0) {
+				PRINTF(("Error getting serial attributes!"));
 				break;
 			}
 
 			cfmakeraw(&options);
-			cfsetospeed(&options, B1000000);
-			cfsetispeed(&options, B1000000);
+
+			{
+				speed_t speedbaud = B0;
+
+				switch (baud) {
+					case 1000000: speedbaud = B1000000; break;
+					case  500000: speedbaud =  B500000; break;
+					case   38400: speedbaud =   B38400; break;
+					case   19200: speedbaud =   B19200; break;
+					default:
+						break;
+				}
+
+				if (speedbaud == B0) {
+					PRINTF(("Not supported baud rate! (%d)", baud));
+					break;
+				}
+
+				if (
+					(cfsetospeed(&options, speedbaud) != 0) ||
+					(cfsetispeed(&options, speedbaud) != 0)
+				) {
+					PRINTF(("Unable to set in/out speed to %d bps", baud));
+					break;
+				}
+			}
 
 			options.c_cflag |= (CLOCAL | CREAD);
 			options.c_cflag &= ~PARENB;
@@ -128,21 +153,27 @@ Serial *new_serial(const char *serialPath) {
 			options.c_cc[VMIN]  = 1;
 			options.c_cc[VTIME] = 0;
 
-			opRet = tcsetattr(ret->fd, TCSANOW, &options);
+			opRet = tcsetattr(fd, TCSANOW, &options);
 			if (opRet != 0) {
+				PRINTF(("Error setting serial attributes!"));
 				break;
 			}
 
-			tcflush(ret->fd, TCIOFLUSH);
+			tcflush(fd, TCIOFLUSH);
 		}
 
+		ret = malloc(sizeof(*ret));
+		ret->fd = fd;
 		ret->base.readByte = _readByte;
 		ret->base.write    = _write;
+
+		PRINTF(("Device %s opened and configured for speed %dbps!", serialPath, baud));
 	} while (0);
 
-	if (ret->fd < 0) {
-		free(ret);
-		ret = NULL;
+	if (ret == NULL) {
+		if (fd >= 0) {
+			close(fd);
+		}
 	}
 
 	return (Serial *) ret;

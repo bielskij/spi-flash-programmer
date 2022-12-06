@@ -35,8 +35,18 @@
  * UART
  */
 
-#define UART_BAUD 1000000//38400
-#define UART_BAUD_REG (((F_CPU / 16) / UART_BAUD) - 1)
+#if BAUD >= 1000000
+	#if F_CPU == 8000000
+		#define F_CPU_PRESCALER 8
+	#else
+		#define F_CPU_PRESCALER 16
+	#endif
+#else
+		#define F_CPU_PRESCALER 16
+#endif
+
+
+#define UART_BAUD_REG (((F_CPU / F_CPU_PRESCALER) / BAUD) - 1)
 
 #define _waitForTransmit() while (! (UCSR0A & _BV(UDRE0)));
 
@@ -44,6 +54,10 @@ void uart_initialize() {
 	// Configure usart
 	UBRR0H = ((UART_BAUD_REG) >> 8);
 	UBRR0L = ((UART_BAUD_REG) & 0x00FF);
+
+#if F_CPU_PRESCALER == 8
+	UCSR0A |= _BV(U2X0);
+#endif
 
 	// 8bit, 1bit stop, no parity
 	UCSR0C  = _BV(UCSZ00) | _BV(UCSZ01);

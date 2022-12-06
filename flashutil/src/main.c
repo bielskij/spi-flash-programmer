@@ -559,6 +559,8 @@ typedef struct _Parameters {
 	char *outputFile;
 	char *inputFile;
 
+	int baud;
+
 	FILE *inputFd;
 	FILE *outputFd;
 
@@ -582,6 +584,7 @@ static struct option longOpts[] = {
 	{ "serial",         required_argument, 0, 'p' },
 	{ "output",         required_argument, 0, 'o' },
 	{ "input",          required_argument, 0, 'i' },
+	{ "baud",           required_argument, 0, 'b' },
 
 	{ "read",           no_argument,       0, 'R' },
 	{ "read-block",     required_argument, 0, 'r' },
@@ -598,7 +601,7 @@ static struct option longOpts[] = {
 	{ 0, 0, 0, 0 }
 };
 
-static const char *shortOpts = "vhp:o:i:Rr:S:EWVug:";
+static const char *shortOpts = "vhp:o:i:b:Rr:S:EWVug:";
 
 
 static void _usage(const char *progName) {
@@ -630,6 +633,8 @@ int main(int argc, char *argv[]) {
 
 		memset(&params, 0, sizeof(params));
 
+		params.baud = 1000000;
+
 		{
 			int option;
 			int longIndex;
@@ -650,6 +655,10 @@ int main(int argc, char *argv[]) {
 
 					case 'i':
 						params.inputFile = strdup(optarg);
+						break;
+
+					case 'b':
+						params.baud = atoi(optarg);
 						break;
 
 					case 'E':
@@ -761,7 +770,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		serial = new_serial(params.serialPort);
+		serial = new_serial(params.serialPort, params.baud);
 		if (serial == NULL) {
 			break;
 		}
@@ -773,6 +782,7 @@ int main(int argc, char *argv[]) {
 			SpiFlashStatus status;
 
 			if (! _spiFlashGetInfo(&info)) {
+				PRINTF(("Failure: Programmer is not responding!"));
 				break;
 			}
 
