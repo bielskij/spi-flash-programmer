@@ -21,6 +21,11 @@ flashutil::SpiCommands::SpiCommands(SpiInterface &interface) {
 }
 
 
+flashutil::SpiCommands::~SpiCommands() {
+
+}
+
+
 bool flashutil::SpiCommands::getJedecId(uint8_t id[3]) {
 	Buffer tx = { 0x9f };
 	Buffer rx(3);

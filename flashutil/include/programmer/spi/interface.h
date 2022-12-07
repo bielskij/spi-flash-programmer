@@ -19,6 +19,9 @@ namespace flashutil {
 			}
 
 		public:
+			virtual bool chipSelect() = 0;
+			virtual bool chipDeselect() = 0;
+
 			virtual bool transfer(const Buffer &tx, Buffer *rx) = 0;
 
 		public:

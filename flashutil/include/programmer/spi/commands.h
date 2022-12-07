@@ -15,6 +15,7 @@ namespace flashutil {
 	class SpiCommands {
 		public:
 			SpiCommands(SpiInterface &interface);
+			~SpiCommands();
 
 		public:
 			bool getJedecId(uint8_t id[3]);

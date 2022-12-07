@@ -9,6 +9,7 @@
 #define PROGRAMMER_H_
 
 #include "programmer/spi/interface.h"
+#include "programmer/chipInfo.h"
 
 namespace flashutil {
 	class Programmer {
@@ -18,6 +19,13 @@ namespace flashutil {
 		public:
 			bool connect();
 			bool disconnect();
+
+			Id   detectChip();
+
+			void setSpec(const FlashSpec *spec);
+
+		public:
+			bool getChipInfo(ChipInfo &info);
 
 		private:
 			Programmer() = delete;

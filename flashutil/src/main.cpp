@@ -17,14 +17,286 @@
 #include <boost/chrono.hpp>
 #include <boost/thread.hpp>
 
+#include "flash/spec.h"
+#include "flash/library.h"
+#include "flash/operations/basic.h"
+
+#include "programmer.h"
+#include "programmer/spi/interface.h"
+
+#include "common/debug.h"
+
+#if 1
+
+struct Parameters {
+	std::string serialPort;
+
+	FILE *inputFd;
+	FILE *outputFd;
+
+	int idx;
+
+	bool read;
+	bool readBlock;
+	bool readSector;
+
+	bool erase;
+	bool write;
+	bool verify;
+
+	bool unprotect;
+
+	Parameters() {
+		inputFd    = nullptr;
+		outputFd   = nullptr;
+		idx        = 0;
+		read       = false;
+		readBlock  = false;
+		readSector = false;
+		erase      = false;
+		write      = false;
+		verify     = false;
+		unprotect  = false;
+	}
+};
+
+namespace po = boost::program_options;
+
+#define OPT_VERBOSE "verbose"
+#define OPT_HELP    "help"
+#define OPT_SERIAL  "serial"
+#define OPT_OUTPUT  "output"
+#define OPT_INPUT   "input"
+
+#define OPT_READ       "read"
+#define OPT_READ_BLOCK "read-block"
+#define OPT_READ_SECT  "read-sector"
+
+#define OPT_ERASE     "erase"
+#define OPT_WRITE     "write"
+#define OPT_VERIFY    "verify"
+#define OPT_UNPROTECT "unprotect"
+
+#define OPT_FLASH_DESC "flash-geometry"
+
+
+static flashutil::FlashSpec unknownChipSpec(
+	"Unknown SPI flash chip",
+
+	flashutil::Id(),
+	flashutil::FlashGeometry(),
+
+	flashutil::BasicOperations::getOpcodes(),
+	std::make_unique<flashutil::BasicOperations>()
+);
+
+
+static void _usage(const po::options_description &opts) {
+	std::cout << opts << std::endl;
+
+	exit(1);
+}
+
+
+int main(int argc, char *argv[]) {
+	int ret = 0;
+
+	std::unique_ptr<flashutil::SpiInterface> spi;
+
+	do {
+		Parameters params;
+
+		{
+			po::options_description opDesc("Program parameters");
+
+			opDesc.add_options()
+				(OPT_VERBOSE    ",v",                           "Verbose output")
+				(OPT_HELP       ",h",                           "Print usage message")
+				(OPT_SERIAL     ",p", po::value<std::string>(), "Serial port path")
+				(OPT_OUTPUT     ",o", po::value<std::string>(), "Output file path or '-' for stdout")
+				(OPT_INPUT      ",i", po::value<std::string>(), "Input file path or '-' for stdin")
+				(OPT_READ       ",R",                           "Read to output file")
+				(OPT_READ_BLOCK ",r", po::value<off_t>(),       "Block index")
+				(OPT_READ_SECT  ",S", po::value<off_t>(),       "Sector index")
+				(OPT_ERASE      ",E",                           "Erase whole chip")
+				(OPT_WRITE      ",W",                           "Write input file")
+				(OPT_VERIFY     ",V",                           "Verify writing process")
+				(OPT_UNPROTECT  ",u",                           "Unprotect the chip before doing any operation on it")
+				(OPT_FLASH_DESC ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+				;
+
+			po::variables_map vm;
+
+			po::store(po::command_line_parser(argc, argv).options(opDesc).run(), vm);
+
+			if (vm.count(OPT_HELP)) {
+				_usage(opDesc);
+			}
+
+			if (! vm.count(OPT_SERIAL)) {
+				PRINTF(("Serial port was not provided!"));
+				_usage(opDesc);
+
+			} else {
+				params.serialPort = vm[OPT_SERIAL].as<std::string>();
+			}
+
+			if (vm.count(OPT_OUTPUT)) {
+				auto output = vm[OPT_OUTPUT].as<std::string>();
+				if (output == "-") {
+					params.outputFd = stdout;
+
+				} else {
+					params.outputFd = fopen(output.c_str(), "w");
+					if (params.outputFd == NULL) {
+						PRINTF(("Unable to open output file! (%s)", output.c_str()));
+
+						ret = 1;
+						break;
+					}
+				}
+			}
+
+			if (vm.count(OPT_INPUT)) {
+				auto input = vm[OPT_INPUT].as<std::string>();
+				if (input == "-") {
+					params.inputFd = stdin;
+
+				}
+				else {
+					params.inputFd = fopen(input.c_str(), "w");
+					if (params.inputFd == NULL) {
+						PRINTF(("Unable to open input file! (%s)", input.c_str()));
+
+						ret = 1;
+						break;
+					}
+				}
+			}
+
+			if (vm.count(OPT_READ)) {
+				params.read = true;
+			}
+
+			if (vm.count(OPT_READ_BLOCK)) {
+				params.readBlock = vm[OPT_READ_BLOCK].as<off_t>();
+			}
+
+			if (vm.count(OPT_READ_SECT)) {
+				params.readSector = vm[OPT_READ_SECT].as<off_t>();
+			}
+
+			if (vm.count(OPT_ERASE)) {
+				params.erase = true;
+			}
+
+			if (vm.count(OPT_UNPROTECT)) {
+				params.unprotect = true;
+			}
+
+			if (vm.count(OPT_FLASH_DESC)) {
+				auto desc = vm[OPT_FLASH_DESC].as<std::string>();
+
+				int blockCount;
+				int blockSize;
+				int sectorCount;
+				int sectorSize;
+				uint8_t unprotectMask;
+
+				if (sscanf(
+					desc.c_str(), "%d:%d:%d:%d:%02hhx",
+					&blockSize, &blockCount,
+					&sectorSize, &sectorCount,
+					&unprotectMask
+				) != 5
+					) {
+					PRINTF(("Invalid flash-geometry syntax!"));
+
+					_usage(opDesc);
+				}
+
+				flashutil::FlashGeometry geometry(blockSize, blockCount, sectorSize, sectorCount);
+
+				if (! geometry.isValid()) {
+					PRINTF(("Invalid flash-geometry, flash size calculated from blocks/sectors differs! (bs: %d, bc: %d, ss: %d, sc: %d)",
+						blockSize, blockCount, sectorSize, sectorCount
+					));
+
+					_usage(opDesc);
+				}
+
+				unknownChipSpec.getFlashGeometry() = geometry;
+			}
+
+			spi = flashutil::SpiInterface::createSerial(params.serialPort);
+			if (! spi) {
+				PRINTF(("Unable to open serial interface at: '%s'!", params.serialPort.c_str()));
+				break;
+			}
+		}
+
+		{
+			flashutil::Programmer programmer(*spi.get());
+
+			if (! programmer.connect()) {
+				PRINTF(("Unable to connect to programmer!"));
+				break;
+			}
+
+			flashutil::Id chipId = programmer.detectChip();
+			if (chipId.isNull()) {
+				PRINTF(("No chip detected!"));
+				break;
+			}
+
+			PRINTF(("Detected chip ID: %08x", chipId.getJedecId()));
+
+			auto *chipSpec = flashutil::FlashLibrary::getInstance().getSpecById(chipId);
+			if (chipSpec == nullptr) {
+				PRINTF(("Chip specification was not found in local library! Using defaults"));
+
+				// Update ID of unknown chip
+				unknownChipSpec.id() = chipId;
+
+				chipSpec = &unknownChipSpec;
+			}
+
+			if (! chipSpec->getFlashGeometry().isValid()) {
+				PRINTF(("Chip '%s' has invalid or missing geometry! (%d, %d, %d, %d)",
+					chipSpec->getName().c_str(),
+					chipSpec->getFlashGeometry().getBlockSize(),
+					chipSpec->getFlashGeometry().getBlockCount(),
+					chipSpec->getFlashGeometry().getSectorSize(),
+					chipSpec->getFlashGeometry().getSectorCount()
+				));
+			}
+
+			{
+				const auto &g  = chipSpec->getFlashGeometry();
+				const auto &id = chipSpec->id();
+
+				PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdkB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
+					chipSpec->getName(), id.getManufacturerId(), id.getMemoryType(), id.getCapacity(),
+					g.getBlockCount() * g.getBlockSize(), g.getBlockCount(), g.getBlockSize() / 1024,
+					g.getSectorCount(), g.getSectorSize()
+				));
+			}
+
+//			programmer.
+		}
+
+	} while (0);
+}
+
+
+#else
+
 #include "crc8.h"
 #include "protocol.h"
 #include "serial.h"
 #include "SpiFlashDevice.h"
 
-#include "common/debug.h"
 
-#define TIMEOUT_MS 1000
 
 #define KB(_x)(1024 * _x)
 
@@ -57,139 +329,6 @@ static SpiFlashDevice unknownDevice(
 
 
 static Serial *serial;
-
-
-bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
-	bool ret = true;
-
-	do {
-		if (responseWritten != NULL) {
-			*responseWritten = 0;
-		}
-
-		// Send
-		{
-			uint16_t txDataSize = 4 + dataSize + 1;
-			
-			auto txData = std::make_unique<uint8_t[]>(txDataSize);
-
-			txData[0] = PROTO_SYNC_BYTE;
-			txData[1] = cmd;
-			txData[2] = dataSize >> 8;
-			txData[3] = dataSize;
-
-			if (dataSize) {
-				memcpy(txData.get() + 4, data, dataSize);
-			}
-
-			txData[txDataSize - 1] = crc8_get(txData.get(), txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
-
-//			debug_dumpBuffer(txData, txDataSize, 32, 0);
-
-			ret = serial->write(serial, txData.get(), txDataSize, TIMEOUT_MS);
-			if (! ret) {
-				break;
-			}
-		}
-
-		// Receive
-		{
-			uint8_t crc = PROTO_CRC8_START;
-			uint8_t tmp;
-
-			// sync
-			{
-				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
-
-				ret = tmp == PROTO_SYNC_BYTE;
-				if (! ret) {
-					ERR(("Received byte is not a sync byte!"));
-					break;
-				}
-
-				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-			}
-
-			// code
-			{
-				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
-
-				if (tmp != PROTO_NO_ERROR) {
-					ERR(("Received error! (%#02x)", tmp));
-				}
-
-				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-			}
-
-			// length
-			{
-				uint16_t dataLen = 0;
-
-				for (int i = 0; i < 2; i++) {
-					ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-					if (! ret) {
-						break;
-					}
-
-					dataLen |= (tmp << (8 * (1 - i)));
-
-					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-				}
-
-				if (! ret) {
-					break;
-				}
-
-				// Data
-				for (uint16_t i = 0; i < dataLen; i++) {
-					ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-					if (! ret) {
-						break;
-					}
-
-					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-
-					if (i < responseSize) {
-						if (response != NULL) {
-							response[i] = tmp;
-						}
-
-						if (responseWritten != NULL) {
-							*responseWritten += 1;
-						}
-					}
-				}
-
-				if (! ret) {
-					break;
-				}
-			}
-
-			// CRC
-			{
-				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
-
-				ret = tmp == crc;
-				if (! ret) {
-					ERR(("CRC mismatch!"));
-					break;
-				}
-			}
-		}
-	} while (0);
-
-	return ret;
-}
-
 
 typedef struct _SpiFlashInfo {
 	uint8_t jedecId[3];
@@ -717,11 +856,12 @@ int main(int argc, char *argv[]) {
 					PRINTF(("Invalid flash-geometry, flash size calculated from blocks/sectors differs!"));
 					exit(1);
 				}
-
+#if 0
 				unknownDevice = SpiFlashDevice(
 					unknownDevice.getName(), unknownDevice.getId().getJedecId(), unknownDevice.getId().getExtendedId(),
 					blockSize, blockCount, sectorSize, sectorCount, unprotectMask
 				);
+#endif
 			}
 		}
 
@@ -956,3 +1096,4 @@ int main(int argc, char *argv[]) {
 
 	return ret;
 }
+#endif

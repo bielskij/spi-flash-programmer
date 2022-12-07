@@ -16,6 +16,8 @@ file(GLOB_RECURSE SRC_FILES
 	src/programmer/spi/impl/serial.cpp
 	src/programmer/spi/commands.cpp
 	src/programmer/spi.cpp
+	src/flash/operations/generic.cpp
+	src/flash/chip/mx25l2005.cpp
 	src/main.cpp
 	src/serial-boost.cpp
 )

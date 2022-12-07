@@ -22,6 +22,8 @@ namespace flashutil {
 
 		public:
 			virtual bool transfer(const Buffer &tx, Buffer *rx) override;
+			virtual bool chipSelect() override;
+			virtual bool chipDeselect() override;
 
 		private:
 			struct Impl;

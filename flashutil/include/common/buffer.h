@@ -15,8 +15,10 @@
 namespace flashutil {
 	class Buffer {
 		public:
-			Buffer(size_t size) {
-				this->_v.reserve(size);
+			Buffer() : Buffer(0) {
+			}
+
+			Buffer(size_t size) : _v(size) {
 			}
 
 			void fill(uint8_t value) {
@@ -35,8 +37,28 @@ namespace flashutil {
 				return this->_v.at(index);
 			}
 
+			const uint8_t &at(size_t index) const {
+				return this->_v.at(index);
+			}
+
 			uint8_t &operator[](size_t index) {
 				return _v[index];
+			}
+
+			const uint8_t &operator[](size_t index) const {
+				return _v[index];
+			}
+
+			size_t size() const {
+				return _v.size();
+			}
+
+			uint8_t *data() {
+				return _v.data();
+			}
+
+			const uint8_t *data() const {
+				return _v.data();
 			}
 
 		private:

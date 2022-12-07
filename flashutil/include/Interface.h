@@ -2,7 +2,7 @@
  * Interface.h
  *
  *  Created on: 5 gru 2022
- *      Author: bielski.j@gmail.com
+ *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
 #ifndef INTERFACE_H_

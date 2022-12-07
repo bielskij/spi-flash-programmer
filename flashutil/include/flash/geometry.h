@@ -13,12 +13,15 @@
 namespace flashutil {
 	class FlashGeometry {
 		public:
-			FlashGeometry() {
-				this->blockSize   = 0;
-				this->blockCount  = 0;
-				this->sectorSize  = 0;
-				this->sectorCount = 0;
-				this->pageSize    = 0;
+			FlashGeometry(size_t bs, size_t bc, size_t ss, size_t sc, size_t ps = 256) {
+				this->blockSize   = bs;
+				this->blockCount  = bc;
+				this->sectorSize  = ss;
+				this->sectorCount = sc;
+				this->pageSize    = ps;
+			}
+
+			FlashGeometry() : FlashGeometry(0, 0, 0, 0) {
 			}
 
 		public:
@@ -40,6 +43,38 @@ namespace flashutil {
 
 			size_t getPageSize() const {
 				return this->pageSize;
+			}
+
+			size_t getTotalSize() const {
+				if (this->blockCount > 0 && this->blockSize > 0) {
+					return this->blockCount * this->blockSize;
+				}
+
+				if (this->sectorCount > 0 && this->sectorSize > 0) {
+					return this->sectorCount * this->sectorSize;
+				}
+
+				return 0;
+			}
+
+			bool isValid() const {
+				size_t totalSizeFromBlocks  = this->blockCount  * this->blockSize;
+				size_t totalSizeFromSectors = this->sectorCount * this->sectorSize;
+
+				if (totalSizeFromBlocks > 0) {
+					if (totalSizeFromSectors > 0) {
+						return totalSizeFromBlocks == totalSizeFromSectors;
+
+					} else {
+						return true;
+					}
+
+				} else if (totalSizeFromSectors > 0) {
+					return true;
+
+				}
+
+				return false;
 			}
 
 		private:
