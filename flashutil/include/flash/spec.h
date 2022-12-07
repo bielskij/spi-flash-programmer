@@ -24,18 +24,45 @@
 namespace flashutil {
 	class FlashSpec {
 		public:
-			FlashSpec(const std::string &name, const Id &id, const FlashGeometry &geometry, const std::set<FlashOpcode> &opcodes, std::unique_ptr<Operations> ops);
+			class StatusReg {
+				public:
+					StatusReg(uint32_t busyMask, uint32_t writeProtectedMask, uint32_t writeEnabledMask, uint32_t protectionBitsMask);
+					virtual ~StatusReg();
+
+				public:
+					void load(uint32_t val) const;
+					uint32_t getRaw() const ;
+
+					virtual bool isBusy() const;
+					virtual bool isWriteProtected() const;
+					virtual bool isWriteEnabled() const;
+					virtual uint32_t getProtectionBits() const;
+
+					virtual void setWriteProtected(bool protect);
+					virtual void setProtectionBits(uint32_t bits);
+			};
 
 		public:
-			const FlashGeometry &getFlashGeometry() const;
-			FlashGeometry &getFlashGeometry();
+			FlashSpec(
+				const std::string &name,
+				const Id &id,
+				const FlashGeometry &geometry,
+				const std::set<FlashOpcode> &opcodes,
+				std::unique_ptr<Operations> customOps
+			);
+
+		public:
+			const FlashGeometry   &getFlashGeometry() const;
+			FlashGeometry         &getFlashGeometry();
 
 			const Id &id() const;
-			Id &id();
+			Id       &id();
 
 			bool hasOpcode(FlashOpcode opcode) const;
 
 			const std::string &getName() const;
+
+			const StatusReg *getStatusReg(uint32_t regValue);
 
 		private:
 			std::string                 _name;
@@ -43,6 +70,7 @@ namespace flashutil {
 			FlashGeometry               _geometry;
 			std::set<FlashOpcode>       _opcodes;
 			std::unique_ptr<Operations> _operations;
+			std::unique_ptr<StatusReg>  _statusReg;
 	};
 }
 

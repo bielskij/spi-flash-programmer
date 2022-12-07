@@ -19,9 +19,14 @@ FLASHUTIL_SPEC_REGISTER() {
 
 			Id(0xc22012, 0),
 			FlashGeometry(KB(64), 4, KB(4), 64),
+			FlashProtection(0x8c),
 
-			BasicOperations::getOpcodes(),
-			std::make_unique<BasicOperations>()
+			{
+				FlashOpcode::H_05_READ_STATUS_REG,
+				FlashOpcode::H_01_WRITE_STATUS_REG,
+				FlashOpcode::H_9F_GET_JEDEC_ID
+			},
+			nullptr
 		)
 	);
 }

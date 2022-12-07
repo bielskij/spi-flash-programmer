@@ -9,10 +9,24 @@
 #define PROGRAMMER_H_
 
 #include "programmer/spi/interface.h"
-#include "programmer/chipInfo.h"
 
 namespace flashutil {
 	class Programmer {
+		public:
+			class ChipStatus {
+				public:
+					bool isProtected() const {
+						return _protected;
+					}
+
+					void setProtected(bool isprotected) {
+						_protected = isprotected;
+					}
+
+				private:
+					bool _protected;
+			};
+
 		public:
 			Programmer(SpiInterface &interface);
 
@@ -25,7 +39,7 @@ namespace flashutil {
 			void setSpec(const FlashSpec *spec);
 
 		public:
-			bool getChipInfo(ChipInfo &info);
+			bool getChipStatus(ChipStatus &status);
 
 		private:
 			Programmer() = delete;

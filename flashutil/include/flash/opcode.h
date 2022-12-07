@@ -10,7 +10,11 @@
 
 namespace flashutil {
 	enum class FlashOpcode {
-		X_9F_GET_JEDEC_ID
+		H_01_WRITE_STATUS_REG,
+		H_04_WRITE_DISABLE,
+		H_05_READ_STATUS_REG,
+		H_06_WRITE_ENABLE,
+		H_9F_GET_JEDEC_ID
 	};
 }
 

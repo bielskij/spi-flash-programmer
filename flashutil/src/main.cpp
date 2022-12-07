@@ -282,7 +282,17 @@ int main(int argc, char *argv[]) {
 				));
 			}
 
-//			programmer.
+			{
+				flashutil::Programmer::ChipStatus chipStatus;
+
+				if (! programmer.getChipStatus(chipStatus)) {
+					break;
+				}
+
+				if (chipStatus.isProtected()) {
+					PRINTF(("Flash is protected!"));
+				}
+			}
 		}
 
 	} while (0);

@@ -31,7 +31,7 @@ flashutil::GenericOperations::~GenericOperations() {
 
 
 bool flashutil::GenericOperations::getChipId(Id &id) {
-	bool ret = self->spec.hasOpcode(FlashOpcode::X_9F_GET_JEDEC_ID);
+	bool ret = self->spec.hasOpcode(FlashOpcode::H_9F_GET_JEDEC_ID);
 
 	if (ret) {
 		uint8_t jedecId[3];
