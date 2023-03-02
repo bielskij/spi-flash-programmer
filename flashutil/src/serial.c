@@ -6,6 +6,7 @@
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -18,6 +19,8 @@ typedef struct _SerialImpl {
 	Serial base;
 
 	int fd;
+	struct termios origTermios;
+	bool           origTermiosSet;
 } SerialImpl;
 
 
@@ -90,30 +93,31 @@ static bool _readByte(struct _Serial *self, uint8_t *value, int timeoutMs) {
 
 
 Serial *new_serial(const char *serialPath, int baud) {
-	SerialImpl *ret = NULL;
-
-	int fd = -1;
+	SerialImpl *ret = malloc(sizeof(*ret));
 
 	do {
-		fd = open(serialPath, O_RDWR | O_NOCTTY | O_NONBLOCK);
-		if (fd < 0) {
+		memset(ret, 0, sizeof(*ret));
+
+		ret->fd = open(serialPath, O_RDWR | O_NOCTTY | O_NONBLOCK);
+		if (ret->fd < 0) {
 			PRINTF(("Unable to open serial device %s (%m)", serialPath));
 			break;
 		}
 
 		{
+			int opRet;
+
 			struct termios options;
-			int opRet = 0;
 
-			memset(&options, 0, sizeof(options));
-
-			opRet = tcgetattr(fd, &options);
+			opRet = tcgetattr(ret->fd, &ret->origTermios);
 			if (opRet != 0) {
 				PRINTF(("Error getting serial attributes!"));
 				break;
 			}
 
-			cfmakeraw(&options);
+			ret->origTermiosSet = true;
+
+			memcpy(&options, &ret->origTermios, sizeof(&options));
 
 			{
 				speed_t speedbaud = B0;
@@ -141,40 +145,102 @@ Serial *new_serial(const char *serialPath, int baud) {
 				}
 			}
 
+			// 8bit
+			options.c_cflag = (options.c_cflag & ~CSIZE) | CS8;
+
+			// Set into raw, no echo mode
+			options.c_iflag  = IGNBRK;
+			options.c_lflag  = 0;
+			options.c_oflag  = 0;
 			options.c_cflag |= (CLOCAL | CREAD);
-			options.c_cflag &= ~PARENB;
+			// disable in/out control
+			options.c_iflag &= ~(IXON | IXOFF | IXANY);
+			// No parity
+			options.c_cflag &= ~(PARENB | PARODD);
+			// 1bit stop
 			options.c_cflag &= ~CSTOPB;
-			options.c_cflag &= ~HUPCL; // Lower modem control lines after last process closes the device - prevent form arduino reset on next call
-			options.c_cflag &= ~CSIZE;
-			options.c_cflag |= CS8;
-			options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-			options.c_oflag &= ~OPOST;
-
 			options.c_cc[VMIN]  = 1;
-			options.c_cc[VTIME] = 0;
+			options.c_cc[VTIME] = 5;
 
-			opRet = tcsetattr(fd, TCSANOW, &options);
+			opRet = tcsetattr(ret->fd, TCSANOW, &options);
 			if (opRet != 0) {
 				PRINTF(("Error setting serial attributes!"));
 				break;
 			}
 
-			tcflush(fd, TCIOFLUSH);
+			// set RTS
+			{
+				int mcs = 0;
+
+				ioctl(ret->fd, TIOCMGET, &mcs);
+				{
+					mcs |= TIOCM_RTS;
+				}
+				ioctl(ret->fd, TIOCMSET, &mcs);
+			}
+
+			// Disable hw flow control
+			{
+				struct termios tty;
+
+				tcgetattr(ret->fd, &tty);
+				{
+					tty.c_cflag &= ~CRTSCTS;
+				}
+				tcsetattr(ret->fd, TCSANOW, &tty);
+			}
+
+			// set line status
+			{
+				struct termios tty;
+
+				tcgetattr(ret->fd, &tty);
+				{
+					tty.c_cflag |= CLOCAL;
+				}
+				tcsetattr(ret->fd, TCSANOW, &tty);
+			}
+
+			{
+				bool doSleep = false;
+
+				// disable hangup on close - prevent from Arduino reset
+				{
+					struct termios tty;
+
+					tcgetattr(ret->fd, &tty);
+					{
+						if ((tty.c_cflag & HUPCL) != 0) {
+							doSleep = true;
+
+							tty.c_cflag &= ~HUPCL;
+						}
+					}
+					tcsetattr(ret->fd, TCSANOW, &tty);
+				}
+
+				if (doSleep) {
+					close(ret->fd);
+				}
+			}
 		}
 
-		ret = malloc(sizeof(*ret));
-		ret->fd = fd;
 		ret->base.readByte = _readByte;
 		ret->base.write    = _write;
 
 		PRINTF(("Device %s opened and configured for speed %dbps!", serialPath, baud));
+
+		return ret;
 	} while (0);
 
-	if (ret == NULL) {
-		if (fd >= 0) {
-			close(fd);
-		}
-	}
+	free_serial(ret);
 
-	return (Serial *) ret;
+	return NULL;
+}
+
+
+void free_serial(Serial *serial) {
+	SerialImpl *s = (SerialImpl *) serial;
+
+
 }

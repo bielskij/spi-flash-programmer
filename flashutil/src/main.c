@@ -1011,7 +1011,9 @@ int main(int argc, char *argv[]) {
 		}
 	} while (0);
 
-	free(serial);
+	if (serial != NULL) {
+		free(serial);
+	}
 
 	return ret;
 }

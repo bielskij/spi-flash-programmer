@@ -14,5 +14,6 @@ typedef struct _Serial {
 
 Serial *new_serial(const char *serialPath, int baud);
 
+void free_serial(Serial *serial);
 
 #endif /* FLASHUTIL_INCLUDE_SERIAL_H_ */
