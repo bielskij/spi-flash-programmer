@@ -5,15 +5,22 @@
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdint.h>
-#define _GNU_SOURCE         /* See feature_test_macros(7) */
+#include <string>
+#include <array>
+#include <memory>
+#include <fstream>
+#include <iostream>
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <time.h>
+
+#include <boost/program_options.hpp>
 
 #include "crc8.h"
 #include "protocol.h"
@@ -24,15 +31,15 @@
 
 
 typedef struct _SpiFlashDevice {
-	char  *name;
-	uint8_t id[5];
-	char    idLen;
-	size_t  blockSize;
-	size_t  blockCount;
-	size_t  sectorSize;
-	size_t  sectorCount;
-	size_t  pageSize;
-	uint8_t protectMask;
+	std::string            name;
+	std::array<uint8_t, 5> id;
+	char                   idLen;
+	size_t                 blockSize;
+	size_t                 blockCount;
+	size_t                 sectorSize;
+	size_t                 sectorCount;
+	size_t                 pageSize;
+	uint8_t                protectMask;
 } SpiFlashDevice;
 
 
@@ -418,9 +425,9 @@ static bool _spiFlashBlockErase(uint32_t address) {
 		do {
 			uint8_t tx[] = {
 				0xd8, // BE
-				(address >> 16) & 0xff,
-				(address >>  8) & 0xff,
-				(address >>  0) & 0xff,
+				static_cast<uint8_t>((address >> 16) & 0xff),
+				static_cast<uint8_t>((address >>  8) & 0xff),
+				static_cast<uint8_t>((address >>  0) & 0xff)
 			};
 
 			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
@@ -509,9 +516,9 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 			{
 				uint8_t tx[] = {
 					0x03, // Read
-					(address >> 16) & 0xff, // Address
-					(address >>  8) & 0xff,
-					(address >>  0) & 0xff
+					static_cast<uint8_t>((address >> 16) & 0xff), // Address
+					static_cast<uint8_t>((address >>  8) & 0xff),
+					static_cast<uint8_t>((address >>  0) & 0xff)
 				};
 
 				ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
@@ -552,20 +559,18 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 }
 
 
-typedef struct _Parameters {
+struct Parameters {
 	bool help;
 
-	char *serialPort;
-	char *outputFile;
-	char *inputFile;
+	std::ofstream outpuFile;
+	std::ifstream inputFile;
+	std::string   serialPort;
+
+	std::ostream *outFd;
+	std::istream *inFd;
 
 	int baud;
-
-	FILE *inputFd;
-	FILE *outputFd;
-
 	int idx;
-
 	bool read;
 	bool readBlock;
 	bool readSector;
@@ -575,51 +580,49 @@ typedef struct _Parameters {
 	bool verify;
 
 	bool unprotect;
-} Parameters;
 
+	Parameters() {
+		this->outFd = nullptr;
+		this->inFd  = nullptr;
 
-static struct option longOpts[] = {
-	{ "verbose",        no_argument,       0, 'v' },
-	{ "help",           no_argument,       0, 'h' },
-	{ "serial",         required_argument, 0, 'p' },
-	{ "output",         required_argument, 0, 'o' },
-	{ "input",          required_argument, 0, 'i' },
-	{ "baud",           required_argument, 0, 'b' },
-
-	{ "read",           no_argument,       0, 'R' },
-	{ "read-block",     required_argument, 0, 'r' },
-	{ "read-sector",    required_argument, 0, 'S' },
-
-	{ "erase",          no_argument,       0, 'E' },
-	{ "write",          no_argument,       0, 'W' },
-	{ "verify",         no_argument,       0, 'V' },
-
-	{ "unprotect",      no_argument,       0, 'u' },
-
-	{ "flash-geometry", required_argument, 0, 'g' },
-
-	{ 0, 0, 0, 0 }
+		this->help       = false;
+		this->baud       = 1000000;
+		this->idx        = -1;
+		this->read       = false;
+		this->readBlock  = false;
+		this->readSector = false;
+		this->erase      = false;
+		this->write      = false;
+		this->verify     = false;
+		this->unprotect  = false;
+	}
 };
 
-static const char *shortOpts = "vhp:o:i:b:Rr:S:EWVug:";
 
 
-static void _usage(const char *progName) {
-	PRINTF(("\nUsage: %s", progName));
+namespace po = boost::program_options;
 
-	struct option *optIt = longOpts;
+#define OPT_VERBOSE "verbose"
+#define OPT_HELP    "help"
+#define OPT_SERIAL  "serial"
+#define OPT_OUTPUT  "output"
+#define OPT_INPUT   "input"
+#define OPT_BAUD    "baud"
 
-	do {
-		PRINTF(("  -%c --%s%s", optIt->val, optIt->name, optIt->has_arg ? " <arg>" : ""));
+#define OPT_READ       "read"
+#define OPT_READ_BLOCK "read-block"
+#define OPT_READ_SECT  "read-sector"
 
-		optIt++;
-	} while (optIt->name != NULL);
+#define OPT_ERASE     "erase"
+#define OPT_WRITE     "write"
+#define OPT_VERIFY    "verify"
+#define OPT_UNPROTECT "unprotect"
 
-	PRINTF(("\nWhere:"));
-	PRINTF(("  flash-geometry <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex>"));
-	PRINTF(("    example: 65536:4:4096:64:8c"));
-	PRINTF(("  input  - can be path to a regular file or '-' for stdin"));
-	PRINTF(("  output - can be path to a regular file or '-' for stdout"));
+#define OPT_FLASH_DESC "flash-geometry"
+
+
+static void _usage(const po::options_description &opts) {
+	std::cout << opts << std::endl;
 
 	exit(1);
 }
@@ -631,146 +634,138 @@ int main(int argc, char *argv[]) {
 	do {
 		Parameters params;
 
-		memset(&params, 0, sizeof(params));
-
-		params.baud = 1000000;
-
 		{
-			int option;
-			int longIndex;
+			po::options_description opDesc("Program parameters");
 
-			while ((option = getopt_long(argc, argv, shortOpts, longOpts, &longIndex)) != -1) {
-				switch (option) {
-					case 'h':
-						params.help = true;
-						break;
+			opDesc.add_options()
+				(OPT_VERBOSE    ",v",                           "Verbose output")
+				(OPT_HELP       ",h",                           "Print usage message")
+				(OPT_SERIAL     ",p", po::value<std::string>(), "Serial port path")
+				(OPT_OUTPUT     ",o", po::value<std::string>(), "Output file path or '-' for stdout")
+				(OPT_INPUT      ",i", po::value<std::string>(), "Input file path or '-' for stdin")
+				(OPT_BAUD       ",b", po::value<int>(),         "Serial port baudrate")
+				(OPT_READ       ",R",                           "Read to output file")
+				(OPT_READ_BLOCK ",r", po::value<off_t>(),       "Block index")
+				(OPT_READ_SECT  ",S", po::value<off_t>(),       "Sector index")
+				(OPT_ERASE      ",E",                           "Erase whole chip")
+				(OPT_WRITE      ",W",                           "Write input file")
+				(OPT_VERIFY     ",V",                           "Verify writing process")
+				(OPT_UNPROTECT  ",u",                           "Unprotect the chip before doing any operation on it")
+				(OPT_FLASH_DESC ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+				;
 
-					case 'p':
-						params.serialPort = strdup(optarg);
-						break;
+			po::variables_map vm;
 
-					case 'o':
-						params.outputFile = strdup(optarg);
-						break;
+			po::store(po::command_line_parser(argc, argv).options(opDesc).run(), vm);
 
-					case 'i':
-						params.inputFile = strdup(optarg);
-						break;
-
-					case 'b':
-						params.baud = atoi(optarg);
-						break;
-
-					case 'E':
-						params.erase = true;
-						break;
-
-					case 'S':
-						params.readSector = true;
-						params.idx        = atoi(optarg);
-						break;
-
-					case 'r':
-						params.readBlock = true;
-						params.idx       = atoi(optarg);
-						break;
-
-					case 'R':
-						params.read = true;
-						break;
-
-					case 'W':
-						params.write = true;
-						break;
-
-					case 'V':
-						params.verify = true;
-						break;
-
-					case 'u':
-						params.unprotect = true;
-						break;
-
-					case 'g':
-						{
-							int blockCount;
-							int blockSize;
-							int sectorCount;
-							int sectorSize;
-							uint8_t unprotectMask;
-
-							if (sscanf(
-								optarg, "%d:%d:%d:%d:%02hhx",
-								&blockSize, &blockCount,
-								&sectorSize, &sectorCount,
-								&unprotectMask
-							) != 5
-							) {
-								PRINTF(("Invalid flash-geometry syntax!"));
-
-								_usage(argv[0]);
-							}
-
-							unknownDevice.blockCount  = blockCount;
-							unknownDevice.blockSize   = blockSize;
-							unknownDevice.sectorCount = sectorCount;
-							unknownDevice.sectorSize  = sectorSize;
-							unknownDevice.protectMask = unprotectMask;
-
-							if (blockCount * blockSize != sectorCount * sectorSize) {
-								PRINTF(("Invalid flash-geometry, flash size calculated from blocks/sectors differs!"));
-								exit(1);
-							}
-						}
-						break;
-
-					default:
-						params.help = true;
-				}
+			if (vm.count(OPT_HELP)) {
+				_usage(opDesc);
 			}
 
-			if (params.help) {
-				_usage(argv[0]);
-			}
-
-			if (params.serialPort == NULL) {
+			if (! vm.count(OPT_SERIAL)) {
 				PRINTF(("Serial port was not provided!"));
+				_usage(opDesc);
 
-				_usage(argv[0]);
+			} else {
+				params.serialPort = vm[OPT_SERIAL].as<std::string>();
 			}
 
-			if (params.outputFile != NULL) {
-				if (strcmp(params.outputFile, "-") == 0) {
-					params.outputFd = stdout;
+			if (vm.count(OPT_BAUD)) {
+				params.baud = vm[OPT_BAUD].as<int>();
+			}
+
+			if (vm.count(OPT_OUTPUT)) {
+				auto output = vm[OPT_OUTPUT].as<std::string>();
+				if (output == "-") {
+					params.outFd = &std::cout;
 
 				} else {
-					params.outputFd = fopen(params.outputFile, "w");
-					if (params.outputFd == NULL) {
-						PRINTF(("Unable to open output file! (%s)", params.outputFile));
+					params.outpuFile.open(output, std::ios::out | std::ios::trunc | std::ios::binary);
+					if (! params.outpuFile.is_open()) {
+						PRINTF(("Unable to open output file! (%s)", output.c_str()));
 
 						ret = 1;
 						break;
 					}
+
+					params.outFd = &params.outpuFile;
 				}
 			}
 
-			if (params.inputFile != NULL) {
-				if (strcmp(params.inputFile, "-") == 0) {
-					params.inputFd = stdin;
+			if (vm.count(OPT_INPUT)) {
+				auto input = vm[OPT_INPUT].as<std::string>();
+				if (input == "-") {
+					params.inFd = &std::cin;
 
-				} else {
-					params.inputFd = fopen(params.inputFile, "r");
-					if (params.inputFd == NULL) {
-						PRINTF(("Unable to open input file! (%s)", params.inputFile));
+				}
+				else {
+					params.inputFile.open(input, std::ios::in | std::ios::binary);
+					if (! params.inputFile.is_open()) {
+						PRINTF(("Unable to open input file! (%s)", input.c_str()));
 
 						ret = 1;
 						break;
 					}
+
+					params.inFd = &params.inputFile;
+				}
+			}
+
+			if (vm.count(OPT_READ)) {
+				params.read = true;
+			}
+
+			if (vm.count(OPT_READ_BLOCK)) {
+				params.readBlock = vm[OPT_READ_BLOCK].as<off_t>();
+			}
+
+			if (vm.count(OPT_READ_SECT)) {
+				params.readSector = vm[OPT_READ_SECT].as<off_t>();
+			}
+
+			if (vm.count(OPT_ERASE)) {
+				params.erase = true;
+			}
+
+			if (vm.count(OPT_UNPROTECT)) {
+				params.unprotect = true;
+			}
+
+			if (vm.count(OPT_FLASH_DESC)) {
+				auto desc = vm[OPT_FLASH_DESC].as<std::string>();
+
+				int blockCount;
+				int blockSize;
+				int sectorCount;
+				int sectorSize;
+				uint8_t unprotectMask;
+
+				if (sscanf(
+					desc.c_str(), "%d:%d:%d:%d:%02hhx",
+					&blockSize, &blockCount,
+					&sectorSize, &sectorCount,
+					&unprotectMask
+				) != 5
+				) {
+					PRINTF(("Invalid flash-geometry syntax!"));
+
+					_usage(opDesc);
+				}
+
+				unknownDevice.blockCount  = blockCount;
+				unknownDevice.blockSize   = blockSize;
+				unknownDevice.sectorCount = sectorCount;
+				unknownDevice.sectorSize  = sectorSize;
+				unknownDevice.protectMask = unprotectMask;
+
+				if (blockCount * blockSize != sectorCount * sectorSize) {
+					PRINTF(("Invalid flash-geometry, flash size calculated from blocks/sectors differs!"));
+					exit(1);
 				}
 			}
 		}
 
-		serial = new_serial(params.serialPort, params.baud);
+		serial = new_serial(params.serialPort.c_str(), params.baud);
 		if (serial == NULL) {
 			break;
 		}
@@ -819,7 +814,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdkB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
-				dev->name, dev->id[0], dev->id[1], dev->id[2],
+				dev->name.c_str(), dev->id[0], dev->id[1], dev->id[2],
 				dev->blockCount * dev->blockSize, dev->blockCount, dev->blockSize / 1024,
 				dev->sectorCount, dev->sectorSize
 			));
@@ -885,11 +880,11 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (params.write) {
-				uint8_t pageBuffer[PAGE_SIZE];
+				std::array<uint8_t, PAGE_SIZE> pageBuffer;
 				size_t  pageWritten;
 				uint32_t address = 0;
 
-				if (params.inputFd == NULL) {
+				if (! params.inFd) {
 					PRINTF(("Writing requested but input file was not defined!"));
 
 					ret = 1;
@@ -897,13 +892,21 @@ int main(int argc, char *argv[]) {
 				}
 
 				do {
-					pageWritten = fread(pageBuffer, 1, sizeof(pageBuffer), params.inputFd);
+					params.inFd->read(reinterpret_cast<char *>(pageBuffer.data()), pageBuffer.size());
+
+					if (*params.inFd) {
+						pageWritten = pageBuffer.size();
+
+					} else {
+						pageWritten = params.inFd->gcount();
+					}
+
 					if (pageWritten > 0) {
 						if (! _spiFlashWriteEnable()) {
 							break;
 						}
 
-						if (! _spiFlashPageWrite(address, pageBuffer, pageWritten)) {
+						if (! _spiFlashPageWrite(address, pageBuffer.data(), pageWritten)) {
 							break;
 						}
 
@@ -917,7 +920,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (params.read || params.readBlock || params.readSector) {
-				if (params.outputFd == NULL) {
+				if (! params.outpuFile.is_open()) {
 					PRINTF(("Reading requested but output file was not defined!"));
 
 					ret = 1;
@@ -928,7 +931,8 @@ int main(int argc, char *argv[]) {
 			if (params.read) {
 				size_t   flashImageSize    = dev->blockSize * dev->blockCount;
 				size_t   flashImageWritten = 0;
-				uint8_t *flashImage        = NULL;
+
+				std::unique_ptr<uint8_t[]> flashImage;
 
 				if (flashImageSize == 0) {
 					PRINTF(("Flash size is unknown!"));
@@ -937,13 +941,11 @@ int main(int argc, char *argv[]) {
 
 				PRINTF(("Reading whole flash"));
 
-				flashImage = malloc(flashImageSize);
+				flashImage.reset(new uint8_t[flashImageSize]);
 
-				if (_spiFlashRead(0, flashImage, flashImageSize, &flashImageWritten)) {
-					fwrite(flashImage, 1, flashImageWritten, params.outputFd);
+				if (_spiFlashRead(0, flashImage.get(), flashImageSize, &flashImageWritten)) {
+					params.outFd->write(reinterpret_cast<char *>(flashImage.get()), flashImageWritten);
 				}
-
-				free(flashImage);
 
 			} else if (params.readBlock) {
 				uint8_t buffer[dev->blockSize];
@@ -955,7 +957,7 @@ int main(int argc, char *argv[]) {
 					break;
 				}
 
-				fwrite(buffer, 1, bufferWritten, params.outputFd);
+				params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
 
 			} else if (params.readSector) {
 				uint8_t buffer[dev->sectorSize];
@@ -967,7 +969,7 @@ int main(int argc, char *argv[]) {
 					break;
 				}
 
-				fwrite(buffer, 1, bufferWritten, params.outputFd);
+				params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
 			}
 
 			if (params.verify) {
@@ -977,7 +979,7 @@ int main(int argc, char *argv[]) {
 				int     blockNo = 0;
 
 				if (params.write) {
-					fseek(params.inputFd, 0, SEEK_SET);
+					params.inFd->seekg(0, std::ios::beg);
 
 				} else {
 					memset(referenceBuffer, 0xff, dev->blockSize);
@@ -987,7 +989,7 @@ int main(int argc, char *argv[]) {
 					PRINTF(("Verifying block %d", blockNo));
 
 					if (params.write) {
-						fread(referenceBuffer, 1, dev->blockSize, params.inputFd);
+						params.inFd->read(reinterpret_cast<char *>(referenceBuffer), dev->blockSize);
 					}
 
 					if (! _spiFlashRead(blockNo * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
