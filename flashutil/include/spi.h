@@ -8,6 +8,7 @@
 #ifndef SPI_H_
 #define SPI_H_
 
+#include <map>
 #include <vector>
 #include <cinttypes>
 
@@ -18,31 +19,47 @@ class Spi {
 				class SendOpts {
 					public:
 						SendOpts &byte(uint8_t byte);
-						SendOpts &data(uint8_t *data, size_t dataSize);
+						SendOpts &data(uint8_t *data, std::size_t dataSize);
 						SendOpts &dummy();
+
+						std::size_t getBytes() const;
+						const uint8_t *data() const;
+
+					private:
+						std::vector<uint8_t> _data;
 				};
 
 				class RecvOpts {
 					public:
-						RecvOpts &skip(size_t count = 0);
-						RecvOpts &byte(size_t count = 0);
+						RecvOpts &skip(std::size_t count = 0);
+						RecvOpts &byte(std::size_t count = 0);
+
+						std::size_t getSkips() const;
+						std::size_t getBytes() const;
+						uint8_t *data();
+						const uint8_t *data() const;
+
+						uint8_t at(std::size_t pos) const;
+
+					private:
+						std::vector<uint8_t>               _data;
+						std::map<std::size_t, std::size_t> _skips;
 				};
 
 			public:
-				Message(size_t size);
+				Message();
 				virtual ~Message();
 
 			public:
 				SendOpts &send();
 				RecvOpts &recv();
 
-				uint8_t  at(size_t pos) const;
-				uint8_t *data();
-				size_t   size() const;
-				const uint8_t *data() const;
+				const SendOpts &send() const;
+				const RecvOpts &recv() const;
 
 			private:
-				std::vector<uint8_t> _data;
+				SendOpts _sendOpts;
+				RecvOpts _recvOpts;
 		};
 
 		class Messages {
@@ -50,8 +67,8 @@ class Spi {
 				Messages();
 
 				Message &add();
-				const Message &at(size_t pos) const;
-				size_t   count() const;
+				const Message &at(std::size_t pos) const;
+				std::size_t count() const;
 
 			private:
 				std::vector<Message> _msgs;
@@ -64,8 +81,6 @@ class Spi {
 
 	protected:
 		Spi() {}
-
-		Message &addMessage(size_t size, bool );
 };
 
 #endif /* SPI_H_ */

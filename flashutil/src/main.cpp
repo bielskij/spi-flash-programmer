@@ -145,11 +145,11 @@ bool _spiFlashGetInfo(SpiFlashInfo *info) {
 	spiDev->transfer(msgs);
 
 	{
-		auto &msg = msgs.at(0);
+		auto &recv = msgs.at(0).recv();
 
-		info->manufacturerId = msg.at(0);
-		info->deviceId[0]    = msg.at(1);
-		info->deviceId[1]    = msg.at(2);
+		info->manufacturerId = recv.at(0);
+		info->deviceId[0]    = recv.at(1);
+		info->deviceId[1]    = recv.at(2);
 	}
 
 #endif
@@ -215,7 +215,7 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 
 	spiDev->transfer(msgs);
 
-	status->raw = msgs.at(0).at(0);
+	status->raw = msgs.at(0).recv().at(0);
 
 	status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
 	status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
@@ -523,7 +523,7 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 
 			spiDev->transfer(msgs);
 
-			memcpy(buffer + *bufferWritten, msgs.at(0).data(), toRead);
+			memcpy(buffer + *bufferWritten, msgs.at(0).recv().data(), toRead);
 
 			*bufferWritten = *bufferWritten + toRead;
 

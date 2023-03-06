@@ -35,7 +35,19 @@ void SerialSpi::transfer(const Messages &msgs) {
 		for (size_t i = 0; i < msgs.count(); i++) {
 			auto &msg = msgs.at(i);
 
+			const size_t rxSize = msg.recv().getBytes() + msg.recv().getSkips();
+			const size_t txSize = msg.send().getBytes();
 
+			size_t rxWritten;
+
+			uint8_t txBuffer[txSize];
+			uint8_t rxBuffer[rxSize];
+
+			memcpy(txBuffer, msg.send().data(), txSize);
+
+			if (this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, &rxWritten)) {
+
+			}
 		}
 	}
 	this->spiCs(true);
