@@ -24,10 +24,9 @@
 
 #include "crc8.h"
 #include "protocol.h"
-#include "serial.h"
+#include "spi.h"
+#include "spi/creator.h"
 #include "debug.h"
-
-#define TIMEOUT_MS 1000
 
 
 typedef struct _SpiFlashDevice {
@@ -90,138 +89,7 @@ static SpiFlashDevice unknownDevice = {
 };
 
 
-static Serial *serial;
-
-
-bool _cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
-	bool ret = true;
-
-	do {
-		if (responseWritten != NULL) {
-			*responseWritten = 0;
-		}
-
-		// Send
-		{
-			uint16_t txDataSize = 4 + dataSize + 1;
-			uint8_t txData[txDataSize];
-
-			txData[0] = PROTO_SYNC_BYTE;
-			txData[1] = cmd;
-			txData[2] = dataSize >> 8;
-			txData[3] = dataSize;
-
-			if (dataSize) {
-				memcpy(txData + 4, data, dataSize);
-			}
-
-			txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
-
-//			debug_dumpBuffer(txData, txDataSize, 32, 0);
-
-			ret = serial->write(serial, txData, txDataSize, TIMEOUT_MS);
-			if (! ret) {
-				break;
-			}
-		}
-
-		// Receive
-		{
-			uint8_t crc = PROTO_CRC8_START;
-			uint8_t tmp;
-
-			// sync
-			{
-				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
-
-				ret = tmp == PROTO_SYNC_BYTE;
-				if (! ret) {
-					ERR(("Received byte is not a sync byte!"));
-					break;
-				}
-
-				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-			}
-
-			// code
-			{
-				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
-
-				if (tmp != PROTO_NO_ERROR) {
-					ERR(("Received error! (%#02x)", tmp));
-				}
-
-				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-			}
-
-			// length
-			{
-				uint16_t dataLen = 0;
-
-				for (int i = 0; i < 2; i++) {
-					ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-					if (! ret) {
-						break;
-					}
-
-					dataLen |= (tmp << (8 * (1 - i)));
-
-					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-				}
-
-				if (! ret) {
-					break;
-				}
-
-				// Data
-				for (uint16_t i = 0; i < dataLen; i++) {
-					ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-					if (! ret) {
-						break;
-					}
-
-					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-
-					if (i < responseSize) {
-						if (response != NULL) {
-							response[i] = tmp;
-						}
-
-						if (responseWritten != NULL) {
-							*responseWritten += 1;
-						}
-					}
-				}
-
-				if (! ret) {
-					break;
-				}
-			}
-
-			// CRC
-			{
-				ret = serial->readByte(serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
-
-				ret = tmp == crc;
-				if (! ret) {
-					ERR(("CRC mismatch!"));
-					break;
-				}
-			}
-		}
-	} while (0);
-
-	return ret;
-}
+static std::unique_ptr<Spi> spiDev;
 
 
 typedef struct _SpiFlashInfo {
@@ -230,38 +98,10 @@ typedef struct _SpiFlashInfo {
 } SpiFlashInfo;
 
 
-static bool _spiCs(bool high) {
-	return _cmdExecute(high ? PROTO_CMD_SPI_CS_HI : PROTO_CMD_SPI_CS_LO, NULL, 0, NULL, 0, NULL);
-}
-
-
-bool _spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, size_t *rxWritten) {
-	bool ret = true;
-
-	do {
-		uint16_t buffSize = 4 + txSize;
-		uint8_t buff[buffSize];
-
-		buff[0] = txSize >> 8;
-		buff[1] = txSize;
-		buff[2] = rxSize >> 8;
-		buff[3] = rxSize;
-
-		memcpy(&buff[4], tx, txSize);
-
-		ret = _cmdExecute(PROTO_CMD_SPI_TRANSFER, buff, buffSize, rx, rxSize, rxWritten);
-		if (! ret) {
-			break;
-		}
-	} while (0);
-
-	return ret;
-}
-
-
 bool _spiFlashGetInfo(SpiFlashInfo *info) {
 	bool ret = true;
 
+#if 0
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -288,6 +128,31 @@ bool _spiFlashGetInfo(SpiFlashInfo *info) {
 			ret = false;
 		}
 	}
+#else
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x9f);
+
+		msg.recv()
+			.skip(1)
+			.byte(3);
+	}
+
+	spiDev->transfer(msgs);
+
+	{
+		auto &msg = msgs.at(0);
+
+		info->manufacturerId = msg.at(0);
+		info->deviceId[0]    = msg.at(1);
+		info->deviceId[1]    = msg.at(2);
+	}
+
+#endif
 
 	return ret;
 }
@@ -306,6 +171,7 @@ typedef struct _SpiFlashStatus {
 bool _spiFlashGetStatus(SpiFlashStatus *status) {
 	bool ret = true;
 
+#if 0
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -333,6 +199,27 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 			ret = false;
 		}
 	}
+#else
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x05); // RDSR
+
+		msg.recv()
+			.skip(1)
+			.byte(1);
+	}
+
+	spiDev->transfer(msgs);
+
+	status->raw = msgs.at(0).at(0);
+
+	status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
+	status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
+#endif
 
 	return ret;
 }
@@ -340,7 +227,7 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 
 static bool _spiFlashWriteEnable() {
 	bool ret = true;
-
+#if 0
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -358,6 +245,18 @@ static bool _spiFlashWriteEnable() {
 			ret = false;
 		}
 	}
+#else
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x06); // WREN
+	}
+
+	spiDev->transfer(msgs);
+#endif
 
 	return ret;
 }
@@ -365,7 +264,7 @@ static bool _spiFlashWriteEnable() {
 
 static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
 	bool ret = true;
-
+#if 0
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -384,6 +283,19 @@ static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
 			ret = false;
 		}
 	}
+#else
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x01) // WRSR
+			.byte(status->raw);
+	}
+
+	spiDev->transfer(msgs);
+#endif
 
 	return ret;
 }
@@ -420,6 +332,7 @@ static bool _spiFlashBlockErase(uint32_t address) {
 
 	PRINTF(("Erasign block at address: %08x", address));
 
+#if 0
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -440,6 +353,21 @@ static bool _spiFlashBlockErase(uint32_t address) {
 			ret = false;
 		}
 	}
+#else
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0xD8) // Block erase (BE)
+			.byte(static_cast<uint8_t>((address >> 16) & 0xff))
+			.byte(static_cast<uint8_t>((address >>  8) & 0xff))
+			.byte(static_cast<uint8_t>((address >>  0) & 0xff));
+	}
+
+	spiDev->transfer(msgs);
+#endif
 
 	return ret;
 }
@@ -476,6 +404,7 @@ bool _spiFlashPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 
 	PRINTF(("Writing page at address: %08x", address));
 
+#if 0
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -498,6 +427,24 @@ bool _spiFlashPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 			ret = false;
 		}
 	}
+#else
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x02) // Page program (PP)
+
+			.byte((address >> 16) & 0xff)
+			.byte((address >>  8) & 0xff)
+			.byte((address >>  0) & 0xff)
+
+			.data(buffer, bufferSize);
+	}
+
+	spiDev->transfer(msgs);
+#endif
 
 	return ret;
 }
@@ -510,6 +457,7 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 
 	DBG(("Reading %lu bytes from address: %08x", bufferSize, address));
 
+#if 0
 	ret = _spiCs(false);
 	if (ret) {
 		do {
@@ -554,6 +502,35 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 			ret = false;
 		}
 	}
+#else
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x03) // Read data (READ)
+
+			.byte((address >> 16) & 0xff) // Address
+			.byte((address >>  8) & 0xff)
+			.byte((address >>  0) & 0xff);
+
+		msg.recv()
+			.byte(PAGE_SIZE);
+
+		while (bufferSize > 0) {
+			uint16_t toRead = bufferSize >= PAGE_SIZE ? PAGE_SIZE : PAGE_SIZE - bufferSize;
+
+			spiDev->transfer(msgs);
+
+			memcpy(buffer + *bufferWritten, msgs.at(0).data(), toRead);
+
+			*bufferWritten = *bufferWritten + toRead;
+
+			bufferSize -= toRead;
+		}
+	}
+#endif
 
 	return ret;
 }
@@ -784,9 +761,10 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		serial = new_serial(params.serialPort.c_str(), params.baud);
-		if (serial == NULL) {
-			break;
+		{
+			SpiCreator creator;
+
+			spiDev = creator.createSerialSpi(params.serialPort, params.baud);
 		}
 
 		{
@@ -1090,10 +1068,6 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	} while (0);
-
-	if (serial != NULL) {
-		free(serial);
-	}
 
 	return ret;
 }
