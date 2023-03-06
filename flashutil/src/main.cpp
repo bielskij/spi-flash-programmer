@@ -576,6 +576,7 @@ struct Parameters {
 	bool readSector;
 
 	bool erase;
+	bool eraseBlock;
 	bool write;
 	bool verify;
 
@@ -592,6 +593,7 @@ struct Parameters {
 		this->readBlock  = false;
 		this->readSector = false;
 		this->erase      = false;
+		this->eraseBlock = false;
 		this->write      = false;
 		this->verify     = false;
 		this->unprotect  = false;
@@ -613,10 +615,11 @@ namespace po = boost::program_options;
 #define OPT_READ_BLOCK "read-block"
 #define OPT_READ_SECT  "read-sector"
 
-#define OPT_ERASE     "erase"
-#define OPT_WRITE     "write"
-#define OPT_VERIFY    "verify"
-#define OPT_UNPROTECT "unprotect"
+#define OPT_ERASE       "erase"
+#define OPT_ERASE_BLOCK "erase-block"
+#define OPT_WRITE       "write"
+#define OPT_VERIFY      "verify"
+#define OPT_UNPROTECT   "unprotect"
 
 #define OPT_FLASH_DESC "flash-geometry"
 
@@ -638,20 +641,21 @@ int main(int argc, char *argv[]) {
 			po::options_description opDesc("Program parameters");
 
 			opDesc.add_options()
-				(OPT_VERBOSE    ",v",                           "Verbose output")
-				(OPT_HELP       ",h",                           "Print usage message")
-				(OPT_SERIAL     ",p", po::value<std::string>(), "Serial port path")
-				(OPT_OUTPUT     ",o", po::value<std::string>(), "Output file path or '-' for stdout")
-				(OPT_INPUT      ",i", po::value<std::string>(), "Input file path or '-' for stdin")
-				(OPT_BAUD       ",b", po::value<int>(),         "Serial port baudrate")
-				(OPT_READ       ",R",                           "Read to output file")
-				(OPT_READ_BLOCK ",r", po::value<off_t>(),       "Block index")
-				(OPT_READ_SECT  ",S", po::value<off_t>(),       "Sector index")
-				(OPT_ERASE      ",E",                           "Erase whole chip")
-				(OPT_WRITE      ",W",                           "Write input file")
-				(OPT_VERIFY     ",V",                           "Verify writing process")
-				(OPT_UNPROTECT  ",u",                           "Unprotect the chip before doing any operation on it")
-				(OPT_FLASH_DESC ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+				(OPT_VERBOSE     ",v",                           "Verbose output")
+				(OPT_HELP        ",h",                           "Print usage message")
+				(OPT_SERIAL      ",p", po::value<std::string>(), "Serial port path")
+				(OPT_OUTPUT      ",o", po::value<std::string>(), "Output file path or '-' for stdout")
+				(OPT_INPUT       ",i", po::value<std::string>(), "Input file path or '-' for stdin")
+				(OPT_BAUD        ",b", po::value<int>(),         "Serial port baudrate")
+				(OPT_READ        ",R",                           "Read to output file")
+				(OPT_READ_BLOCK  ",r", po::value<off_t>(),       "Read block at index")
+				(OPT_READ_SECT   ",S", po::value<off_t>(),       "Read Sector at index")
+				(OPT_ERASE       ",E",                           "Erase whole chip")
+				(OPT_ERASE_BLOCK ",e", po::value<off_t>(),       "Erase block at index")
+				(OPT_WRITE       ",W",                           "Write input file")
+				(OPT_VERIFY      ",V",                           "Verify writing process")
+				(OPT_UNPROTECT   ",u",                           "Unprotect the chip before doing any operation on it")
+				(OPT_FLASH_DESC  ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
 				;
 
 			po::variables_map vm;
@@ -716,15 +720,30 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (vm.count(OPT_READ_BLOCK)) {
-				params.readBlock = vm[OPT_READ_BLOCK].as<off_t>();
+				params.readBlock = true;
+				params.idx       = vm[OPT_READ_BLOCK].as<off_t>();
 			}
 
 			if (vm.count(OPT_READ_SECT)) {
-				params.readSector = vm[OPT_READ_SECT].as<off_t>();
+				params.readSector = true;
+				params.idx        = vm[OPT_READ_SECT].as<off_t>();
+			}
+
+			if (vm.count(OPT_WRITE)) {
+				params.write = true;
 			}
 
 			if (vm.count(OPT_ERASE)) {
 				params.erase = true;
+			}
+
+			if (vm.count(OPT_ERASE_BLOCK)) {
+				params.eraseBlock = true;
+				params.idx        = vm[OPT_ERASE_BLOCK].as<off_t>();
+			}
+
+			if (vm.count(OPT_VERIFY)) {
+				params.verify = true;
 			}
 
 			if (vm.count(OPT_UNPROTECT)) {
@@ -813,7 +832,7 @@ int main(int argc, char *argv[]) {
 				dev = &unknownDevice;
 			}
 
-			PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdkB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
+			PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
 				dev->name.c_str(), dev->id[0], dev->id[1], dev->id[2],
 				dev->blockCount * dev->blockSize, dev->blockCount, dev->blockSize / 1024,
 				dev->sectorCount, dev->sectorSize
@@ -827,6 +846,10 @@ int main(int argc, char *argv[]) {
 
 			if ((status.raw & dev->protectMask) != 0) {
 				PRINTF(("Flash is protected!"));
+			}
+
+			if (params.erase && params.eraseBlock) {
+				params.eraseBlock = false;
 			}
 
 			if (params.unprotect) {
@@ -866,16 +889,43 @@ int main(int argc, char *argv[]) {
 			if (params.erase) {
 				for (int block = 0; block < dev->blockCount; block++) {
 					if (! _spiFlashWriteEnable()) {
+						ret = 1;
 						break;
 					}
 
 					if (! _spiFlashBlockErase(block * dev->blockSize)) {
+						ret = 1;
 						break;
 					}
 
 					if (! _spiFlashWriteWait(&status, 100)) {
+						ret = 1;
 						break;
 					}
+				}
+			}
+
+			if (params.eraseBlock) {
+				if (params.idx >= dev->blockCount) {
+					PRINTF(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
+
+					ret = 1;
+					break;
+				}
+
+				if (! _spiFlashWriteEnable()) {
+					ret = 1;
+					break;
+				}
+
+				if (! _spiFlashBlockErase(params.idx * dev->blockSize)) {
+					ret = 1;
+					break;
+				}
+
+				if (! _spiFlashWriteWait(&status, 100)) {
+					ret = 1;
+					break;
 				}
 			}
 
@@ -951,6 +1001,13 @@ int main(int argc, char *argv[]) {
 				uint8_t buffer[dev->blockSize];
 				size_t  bufferWritten;
 
+				if (params.idx >= dev->blockCount) {
+					PRINTF(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
+
+					ret = 1;
+					break;
+				}
+
 				PRINTF(("Reading block %u (%#lx)", params.idx, params.idx * dev->blockSize));
 
 				if (! _spiFlashRead(params.idx * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
@@ -962,6 +1019,13 @@ int main(int argc, char *argv[]) {
 			} else if (params.readSector) {
 				uint8_t buffer[dev->sectorSize];
 				size_t  bufferWritten;
+
+				if (params.idx >= dev->sectorCount) {
+					PRINTF(("Sector index is out of bound! (%d >= %zd)", params.idx, dev->sectorCount));
+
+					ret = 1;
+					break;
+				}
 
 				PRINTF(("Reading sector %u (%#lx)", params.idx, params.idx * dev->sectorSize));
 
@@ -979,6 +1043,7 @@ int main(int argc, char *argv[]) {
 				int     blockNo = 0;
 
 				if (params.write) {
+					params.inFd->clear();
 					params.inFd->seekg(0, std::ios::beg);
 
 				} else {
@@ -986,18 +1051,31 @@ int main(int argc, char *argv[]) {
 				}
 
 				while (blockNo < dev->blockCount) {
-					PRINTF(("Verifying block %d", blockNo));
+					size_t compareSize = 0;
 
-					if (params.write) {
+					if (params.inFd) {
 						params.inFd->read(reinterpret_cast<char *>(referenceBuffer), dev->blockSize);
+
+						if (*params.inFd) {
+							compareSize = dev->blockSize;
+
+						} else {
+							compareSize = params.inFd->gcount();
+						}
 					}
 
-					if (! _spiFlashRead(blockNo * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
+					if (compareSize <= 0) {
+						break;
+					}
+
+					PRINTF(("Verifying block %d", blockNo));
+
+					if (! _spiFlashRead(blockNo * dev->blockSize, buffer, compareSize, &bufferWritten)) {
 						ret = 1;
 						break;
 					}
 
-					if (memcmp(buffer, referenceBuffer, dev->blockSize) == 0) {
+					if (memcmp(buffer, referenceBuffer, bufferWritten) == 0) {
 						PRINTF(("Verification of block %d -> SUCCESS", blockNo));
 
 					} else {
