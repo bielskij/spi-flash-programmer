@@ -23,6 +23,7 @@ DIR_SRC := src
 
 F_CPU ?= 16000000
 BAUD  ?=  1000000
+UART  ?= /dev/ttyUSB0
 MCU   := atmega328p
 
 CFLAGS := -std=c99 
@@ -62,7 +63,7 @@ burn: burn-arduino
 
 
 burn-arduino:
-	avrdude -p m328p -P /dev/ttyUSB0 -c arduino -b57600 -U flash:w:$(HEX_FILE):i
+	avrdude -p m328p -P $(UART) -c arduino -b57600 -U flash:w:$(HEX_FILE):i
 
 burn-usbasp:
 	# fuses used for atmega328p
