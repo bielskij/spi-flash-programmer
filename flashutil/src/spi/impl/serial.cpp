@@ -3,6 +3,8 @@
 #include "crc8.h"
 #include "protocol.h"
 
+#include "exception.h"
+
 #include "serial.h"
 #include "serial/serial.h"
 
@@ -55,7 +57,9 @@ void SerialSpi::transfer(Messages &msgs) {
 			this->spiCs(false);
 		}
 
-		if (this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, &rxWritten)) {
+		this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, &rxWritten);
+
+		{
 			std::size_t dstOffset = 0;
 
 			auto skipIndex = msg.recv().getSkipMap();
@@ -76,147 +80,120 @@ void SerialSpi::transfer(Messages &msgs) {
 }
 
 
-bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
-	bool ret = true;
+void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
+	DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd, %p", cmd, cmd, data, dataSize, response, responseSize, responseWritten));
 
-	do {
-		DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd, %p", cmd, cmd, data, dataSize, response, responseSize, responseWritten));
+	if (responseWritten != NULL) {
+		*responseWritten = 0;
+	}
 
-		if (responseWritten != NULL) {
-			*responseWritten = 0;
+	// Send
+	{
+		uint16_t txDataSize = 4 + dataSize + 1;
+		uint8_t txData[txDataSize];
+
+		txData[0] = PROTO_SYNC_BYTE;
+		txData[1] = cmd;
+		txData[2] = dataSize >> 8;
+		txData[3] = dataSize;
+
+		if (dataSize) {
+			memcpy(txData + 4, data, dataSize);
 		}
 
-		// Send
+		txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
+
+//		debug_dumpBuffer(txData, txDataSize, 32, 0);
+
+		self->serial->write(txData, txDataSize, TIMEOUT_MS);
+	}
+
+	// Receive
+	{
+		uint8_t crc = PROTO_CRC8_START;
+		uint8_t tmp;
+
+		// sync
 		{
-			uint16_t txDataSize = 4 + dataSize + 1;
-			uint8_t txData[txDataSize];
+			tmp = self->serial->readByte(TIMEOUT_MS);
 
-			txData[0] = PROTO_SYNC_BYTE;
-			txData[1] = cmd;
-			txData[2] = dataSize >> 8;
-			txData[3] = dataSize;
-
-			if (dataSize) {
-				memcpy(txData + 4, data, dataSize);
+			if (tmp != PROTO_SYNC_BYTE) {
+				throw_Exception("Received byte is not a sync byte!");
 			}
 
-			txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
-
-//			debug_dumpBuffer(txData, txDataSize, 32, 0);
-
-			self->serial->write(txData, txDataSize, TIMEOUT_MS);
+			crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
 		}
 
-		// Receive
+		// code
 		{
-			uint8_t crc = PROTO_CRC8_START;
-			uint8_t tmp;
+			tmp = self->serial->readByte(TIMEOUT_MS);
 
-			// sync
-			{
+			if (tmp != PROTO_NO_ERROR) {
+				throw_Exception("Received error! " + std::to_string(tmp));
+			}
+
+			crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
+		}
+
+		// length
+		{
+			uint16_t dataLen = 0;
+
+			for (int i = 0; i < 2; i++) {
 				tmp = self->serial->readByte(TIMEOUT_MS);
 
-				ret = tmp == PROTO_SYNC_BYTE;
-				if (! ret) {
-					ERR(("Received byte is not a sync byte!"));
-					break;
-				}
+				dataLen |= (tmp << (8 * (1 - i)));
 
 				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
 			}
 
-			// code
-			{
+			// Data
+			for (uint16_t i = 0; i < dataLen; i++) {
 				tmp = self->serial->readByte(TIMEOUT_MS);
 
-				if (tmp != PROTO_NO_ERROR) {
-					ERR(("Received error! (%#02x)", tmp));
-				}
-
 				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-			}
 
-			// length
-			{
-				uint16_t dataLen = 0;
+				if (i < responseSize) {
+					if (response != NULL) {
+						response[i] = tmp;
+					}
 
-				for (int i = 0; i < 2; i++) {
-					tmp = self->serial->readByte(TIMEOUT_MS);
-
-					dataLen |= (tmp << (8 * (1 - i)));
-
-					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-				}
-
-				if (! ret) {
-					break;
-				}
-
-				// Data
-				for (uint16_t i = 0; i < dataLen; i++) {
-					tmp = self->serial->readByte(TIMEOUT_MS);
-
-					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
-
-					if (i < responseSize) {
-						if (response != NULL) {
-							response[i] = tmp;
-						}
-
-						if (responseWritten != NULL) {
-							*responseWritten += 1;
-						}
+					if (responseWritten != NULL) {
+						*responseWritten += 1;
 					}
 				}
-
-				if (! ret) {
-					break;
-				}
-			}
-
-			// CRC
-			{
-				tmp = self->serial->readByte(TIMEOUT_MS);
-
-				ret = tmp == crc;
-				if (! ret) {
-					ERR(("CRC mismatch!"));
-					break;
-				}
 			}
 		}
 
-//		debug_dumpBuffer(response, responseSize, 32, 0);
-	} while (0);
+		// CRC
+		{
+			tmp = self->serial->readByte(TIMEOUT_MS);
 
-	return ret;
-}
-
-
-bool SerialSpi::spiCs(bool high) {
-	return this->cmdExecute(high ? PROTO_CMD_SPI_CS_HI : PROTO_CMD_SPI_CS_LO, NULL, 0, NULL, 0, NULL);
-}
-
-
-bool SerialSpi::spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, size_t *rxWritten) {
-	bool ret = true;
-
-	do {
-		uint16_t buffSize = 4 + txSize;
-		uint8_t buff[buffSize];
-
-		buff[0] = txSize >> 8;
-		buff[1] = txSize;
-		buff[2] = rxSize >> 8;
-		buff[3] = rxSize;
-
-		memcpy(&buff[4], tx, txSize);
-
-		ret = this->cmdExecute(PROTO_CMD_SPI_TRANSFER, buff, buffSize, rx, rxSize, rxWritten);
-		if (! ret) {
-			break;
+			if (tmp != crc) {
+				throw_Exception("CRC mismatch!");
+			}
 		}
-	} while (0);
+	}
 
-	return ret;
+//	debug_dumpBuffer(response, responseSize, 32, 0);
+}
+
+
+void SerialSpi::spiCs(bool high) {
+	this->cmdExecute(high ? PROTO_CMD_SPI_CS_HI : PROTO_CMD_SPI_CS_LO, NULL, 0, NULL, 0, NULL);
+}
+
+
+void SerialSpi::spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, size_t *rxWritten) {
+	uint16_t buffSize = 4 + txSize;
+	uint8_t  buff[buffSize];
+
+	buff[0] = txSize >> 8;
+	buff[1] = txSize;
+	buff[2] = rxSize >> 8;
+	buff[3] = rxSize;
+
+	memcpy(&buff[4], tx, txSize);
+
+	this->cmdExecute(PROTO_CMD_SPI_TRANSFER, buff, buffSize, rx, rxSize, rxWritten);
 }

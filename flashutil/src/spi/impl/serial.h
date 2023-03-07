@@ -22,9 +22,9 @@ class SerialSpi : public Spi {
 		void chipSelect(bool select) override;
 
 	private:
-		bool cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten);
-		bool spiCs(bool high);
-		bool spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, size_t *rxWritten);
+		void cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten);
+		void spiCs(bool high);
+		void spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, size_t *rxWritten);
 
 	private:
 		class Impl;
