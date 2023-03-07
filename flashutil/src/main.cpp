@@ -101,58 +101,30 @@ typedef struct _SpiFlashInfo {
 bool _spiFlashGetInfo(SpiFlashInfo *info) {
 	bool ret = true;
 
-#if 0
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			uint8_t tx[] = {
-				0x9f // RDID
-			};
+	{
+		Spi::Messages msgs;
 
-			uint8_t rx[4];
-			size_t rxWritten;
+		{
+			auto &msg = msgs.add();
 
-			memset(info, 0, sizeof(*info));
+			msg.send()
+				.byte(0x9f);
 
-			ret = _spiTransfer(tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
-			if (! ret) {
-				break;
-			}
+			msg.recv()
+				.skip(1)
+				.bytes(3);
+		}
 
-			info->manufacturerId = rx[1];
-			info->deviceId[0]    = rx[2];
-			info->deviceId[1]    = rx[3];
-		} while (0);
+		spiDev->transfer(msgs);
 
-		if (! _spiCs(true)) {
-			ret = false;
+		{
+			auto &recv = msgs.at(0).recv();
+
+			info->manufacturerId = recv.at(0);
+			info->deviceId[0]    = recv.at(1);
+			info->deviceId[1]    = recv.at(2);
 		}
 	}
-#else
-	Spi::Messages msgs;
-
-	{
-		auto &msg = msgs.add();
-
-		msg.send()
-			.byte(0x9f);
-
-		msg.recv()
-			.skip(1)
-			.byte(3);
-	}
-
-	spiDev->transfer(msgs);
-
-	{
-		auto &recv = msgs.at(0).recv();
-
-		info->manufacturerId = recv.at(0);
-		info->deviceId[0]    = recv.at(1);
-		info->deviceId[1]    = recv.at(2);
-	}
-
-#endif
 
 	return ret;
 }
@@ -171,55 +143,27 @@ typedef struct _SpiFlashStatus {
 bool _spiFlashGetStatus(SpiFlashStatus *status) {
 	bool ret = true;
 
-#if 0
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			uint8_t tx[] = {
-				0x05 // RDSR
-			};
-
-			uint8_t rx[2];
-			size_t rxWritten;
-
-			memset(status, 0, sizeof(*status));
-
-			ret = _spiTransfer(tx, sizeof(tx), rx, sizeof(rx), &rxWritten);
-			if (! ret) {
-				break;
-			}
-
-			status->raw = rx[1];
-
-			status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
-			status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
-		} while (0);
-
-		if (! _spiCs(true)) {
-			ret = false;
-		}
-	}
-#else
-	Spi::Messages msgs;
-
 	{
-		auto &msg = msgs.add();
+		Spi::Messages msgs;
 
-		msg.send()
-			.byte(0x05); // RDSR
+		{
+			auto &msg = msgs.add();
 
-		msg.recv()
-			.skip(1)
-			.byte(1);
+			msg.send()
+				.byte(0x05); // RDSR
+
+			msg.recv()
+				.skip(1)
+				.bytes(1);
+		}
+
+		spiDev->transfer(msgs);
+
+		status->raw = msgs.at(0).recv().at(0);
+
+		status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
+		status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
 	}
-
-	spiDev->transfer(msgs);
-
-	status->raw = msgs.at(0).recv().at(0);
-
-	status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
-	status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
-#endif
 
 	return ret;
 }
@@ -508,27 +452,40 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 	{
 		auto &msg = msgs.add();
 
-		msg.send()
-			.byte(0x03) // Read data (READ)
+		msg
+			.reset()
+			.autoChipSelect(false)
+			.send()
+				.byte(0x03) // Read data (READ)
 
-			.byte((address >> 16) & 0xff) // Address
-			.byte((address >>  8) & 0xff)
-			.byte((address >>  0) & 0xff);
+				.byte((address >> 16) & 0xff) // Address
+				.byte((address >>  8) & 0xff)
+				.byte((address >>  0) & 0xff);
 
-		msg.recv()
-			.byte(PAGE_SIZE);
-
-		while (bufferSize > 0) {
-			uint16_t toRead = bufferSize >= PAGE_SIZE ? PAGE_SIZE : PAGE_SIZE - bufferSize;
-
+		spiDev->chipSelect(true);
+		{
 			spiDev->transfer(msgs);
 
-			memcpy(buffer + *bufferWritten, msgs.at(0).recv().data(), toRead);
+			msg
+				.reset()
+				.autoChipSelect(false)
+				.recv()
+					.bytes(PAGE_SIZE);
 
-			*bufferWritten = *bufferWritten + toRead;
+			while (bufferSize > 0) {
+				uint16_t toRead = bufferSize >= PAGE_SIZE ? PAGE_SIZE : PAGE_SIZE - bufferSize;
+				uint16_t rest   = bufferSize - toRead;
 
-			bufferSize -= toRead;
+				spiDev->transfer(msgs);
+
+				memcpy(buffer + *bufferWritten, msgs.at(0).recv().data(), toRead);
+
+				*bufferWritten = *bufferWritten + toRead;
+
+				bufferSize -= toRead;
+			}
 		}
+		spiDev->chipSelect(false);
 	}
 #endif
 

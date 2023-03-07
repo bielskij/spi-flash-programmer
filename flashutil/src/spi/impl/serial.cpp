@@ -5,6 +5,8 @@
 
 #include "crc8.h"
 #include "protocol.h"
+
+//#define DEBUG 1
 #include "debug.h"
 
 
@@ -29,28 +31,47 @@ SerialSpi::SerialSpi(const std::string &path, int baudrate) {
 }
 
 
-void SerialSpi::transfer(const Messages &msgs) {
-	this->spiCs(false);
-	{
-		for (size_t i = 0; i < msgs.count(); i++) {
-			auto &msg = msgs.at(i);
+void SerialSpi::chipSelect(bool select) {
+	this->spiCs(! select);
+}
 
-			const size_t rxSize = msg.recv().getBytes() + msg.recv().getSkips();
-			const size_t txSize = msg.send().getBytes();
 
-			size_t rxWritten;
+void SerialSpi::transfer(Messages &msgs) {
+	for (size_t i = 0; i < msgs.count(); i++) {
+		auto &msg = msgs.at(i);
 
-			uint8_t txBuffer[txSize];
-			uint8_t rxBuffer[rxSize];
+		const size_t rxSize = msg.recv().getBytes() + msg.recv().getSkips();
+		const size_t txSize = msg.send().getBytes();
 
-			memcpy(txBuffer, msg.send().data(), txSize);
+		size_t rxWritten;
 
-			if (this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, &rxWritten)) {
+		uint8_t txBuffer[txSize];
+		uint8_t rxBuffer[rxSize];
 
+		memcpy(txBuffer, msg.send().data(), txSize);
+
+		if (msg.isAutoChipSelect()) {
+			this->spiCs(false);
+		}
+
+		if (this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, &rxWritten)) {
+			std::size_t dstOffset = 0;
+
+			auto skipIndex = msg.recv().getSkipMap();
+
+			for (int i = 0; i < rxWritten; i++) {
+				if (skipIndex.find(i) != skipIndex.end()) {
+					continue;
+				}
+
+				msg.recv().data()[dstOffset++] = rxBuffer[i];
 			}
 		}
+
+		if (msg.isAutoChipSelect()) {
+			this->spiCs(true);
+		}
 	}
-	this->spiCs(true);
 }
 
 
@@ -58,6 +79,8 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 	bool ret = true;
 
 	do {
+		DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd, %p", cmd, cmd, data, dataSize, response, responseSize, responseWritten));
+
 		if (responseWritten != NULL) {
 			*responseWritten = 0;
 		}
@@ -179,6 +202,8 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 				}
 			}
 		}
+
+//		debug_dumpBuffer(response, responseSize, 32, 0);
 	} while (0);
 
 	return ret;

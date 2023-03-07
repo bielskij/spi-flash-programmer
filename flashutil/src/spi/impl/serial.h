@@ -17,7 +17,8 @@ class SerialSpi : public Spi {
 	public:
 		SerialSpi(const std::string &path, int baudrate);
 
-		void transfer(const Messages &msgs) override;
+		void transfer(Messages &msgs) override;
+		void chipSelect(bool select) override;
 
 	private:
 		bool cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten);

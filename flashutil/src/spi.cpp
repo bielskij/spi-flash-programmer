@@ -39,13 +39,30 @@ const uint8_t *Spi::Message::SendOpts::data() const {
 }
 
 
-Spi::Message::RecvOpts &Spi::Message::RecvOpts::skip(std::size_t count) {
+Spi::Message::SendOpts &Spi::Message::SendOpts::reset() {
+	this->_data.clear();
+
 	return *this;
 }
 
 
-Spi::Message::RecvOpts &Spi::Message::RecvOpts::byte(std::size_t count) {
-	this->_data.push_back(0xff);
+Spi::Message::RecvOpts &Spi::Message::RecvOpts::skip(std::size_t count) {
+	size_t pos = this->_data.size();
+
+	for (auto &skip : this->_skips) {
+		pos += skip.second;
+	}
+
+	this->_skips[pos] = count;
+
+	return *this;
+}
+
+
+Spi::Message::RecvOpts &Spi::Message::RecvOpts::bytes(std::size_t count) {
+	while (count--) {
+		this->_data.push_back(0xff);
+	}
 
 	return *this;
 }
@@ -62,6 +79,19 @@ std::size_t Spi::Message::RecvOpts::getSkips() const {
 }
 
 
+std::set<std::size_t> Spi::Message::RecvOpts::getSkipMap() const {
+	std::set<std::size_t> ret;
+
+	for (const auto &skip : this->_skips) {
+		for (std::size_t i = 0; i < skip.second; i++) {
+			ret.insert(i + skip.first);
+		}
+	}
+
+	return ret;
+}
+
+
 std::size_t Spi::Message::RecvOpts::getBytes() const {
 	return this->_data.size();
 }
@@ -72,18 +102,21 @@ uint8_t *Spi::Message::RecvOpts::data() {
 }
 
 
-const uint8_t *Spi::Message::RecvOpts::data() const {
-	return this->_data.data();
-}
-
-
 uint8_t Spi::Message::RecvOpts::at(std::size_t pos) const {
 	return this->_data.at(pos);
 }
 
 
-Spi::Message::Message() {
+Spi::Message::RecvOpts &Spi::Message::RecvOpts::reset() {
+	this->_data.clear();
+	this->_skips.clear();
 
+	return *this;
+}
+
+
+Spi::Message::Message() {
+	this->_autoCs = true;
 }
 
 
@@ -102,13 +135,25 @@ Spi::Message::RecvOpts &Spi::Message::recv() {
 }
 
 
-const Spi::Message::SendOpts &Spi::Message::send() const {
-	return this->_sendOpts;
+Spi::Message &Spi::Message::autoChipSelect(bool autoCsAllowed) {
+	this->_autoCs = autoCsAllowed;
+
+	return *this;
 }
 
 
-const Spi::Message::RecvOpts &Spi::Message::recv() const {
-	return this->_recvOpts;
+Spi::Message &Spi::Message::reset() {
+	this->_recvOpts.reset();
+	this->_sendOpts.reset();
+
+	this->_autoCs = true;
+
+	return *this;
+}
+
+
+bool Spi::Message::isAutoChipSelect() const {
+	return this->_autoCs;
 }
 
 
@@ -124,7 +169,7 @@ Spi::Message &Spi::Messages::add() {
 }
 
 
-const Spi::Message &Spi::Messages::at(std::size_t pos) const {
+Spi::Message &Spi::Messages::at(std::size_t pos) {
 	return this->_msgs.at(pos);
 }
 

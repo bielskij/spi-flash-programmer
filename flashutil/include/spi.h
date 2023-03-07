@@ -8,6 +8,7 @@
 #ifndef SPI_H_
 #define SPI_H_
 
+#include <set>
 #include <map>
 #include <vector>
 #include <cinttypes>
@@ -25,6 +26,8 @@ class Spi {
 						std::size_t getBytes() const;
 						const uint8_t *data() const;
 
+						SendOpts &reset();
+
 					private:
 						std::vector<uint8_t> _data;
 				};
@@ -32,14 +35,16 @@ class Spi {
 				class RecvOpts {
 					public:
 						RecvOpts &skip(std::size_t count = 0);
-						RecvOpts &byte(std::size_t count = 0);
+						RecvOpts &bytes(std::size_t count = 0);
 
 						std::size_t getSkips() const;
 						std::size_t getBytes() const;
-						uint8_t *data();
-						const uint8_t *data() const;
+						std::set<std::size_t> getSkipMap() const;
 
+						uint8_t *data();
 						uint8_t at(std::size_t pos) const;
+
+						RecvOpts &reset();
 
 					private:
 						std::vector<uint8_t>               _data;
@@ -53,11 +58,14 @@ class Spi {
 			public:
 				SendOpts &send();
 				RecvOpts &recv();
+				Message  &autoChipSelect(bool autoCsAllowed);
 
-				const SendOpts &send() const;
-				const RecvOpts &recv() const;
+				Message &reset();
+
+				bool isAutoChipSelect() const;
 
 			private:
+				bool     _autoCs;
 				SendOpts _sendOpts;
 				RecvOpts _recvOpts;
 		};
@@ -67,7 +75,7 @@ class Spi {
 				Messages();
 
 				Message &add();
-				const Message &at(std::size_t pos) const;
+				Message &at(std::size_t pos);
 				std::size_t count() const;
 
 			private:
@@ -77,7 +85,8 @@ class Spi {
 	public:
 		virtual ~Spi() {}
 
-		virtual void transfer(const Messages &msgs) = 0;
+		virtual void transfer(Messages &msgs) = 0;
+		virtual void chipSelect(bool select) = 0;
 
 	protected:
 		Spi() {}
