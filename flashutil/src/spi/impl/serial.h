@@ -16,6 +16,7 @@
 class SerialSpi : public Spi {
 	public:
 		SerialSpi(const std::string &path, int baudrate);
+		~SerialSpi();
 
 		void transfer(Messages &msgs) override;
 		void chipSelect(bool select) override;

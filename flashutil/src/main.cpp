@@ -171,25 +171,7 @@ bool _spiFlashGetStatus(SpiFlashStatus *status) {
 
 static bool _spiFlashWriteEnable() {
 	bool ret = true;
-#if 0
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			uint8_t tx[] = {
-				0x06 // WREN
-			};
 
-			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
-			if (! ret) {
-				break;
-			}
-		} while (0);
-
-		if (! _spiCs(true)) {
-			ret = false;
-		}
-	}
-#else
 	Spi::Messages msgs;
 
 	{
@@ -200,7 +182,6 @@ static bool _spiFlashWriteEnable() {
 	}
 
 	spiDev->transfer(msgs);
-#endif
 
 	return ret;
 }
@@ -208,26 +189,7 @@ static bool _spiFlashWriteEnable() {
 
 static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
 	bool ret = true;
-#if 0
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			uint8_t tx[] = {
-				0x01, // WRSR
-				status->raw
-			};
 
-			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
-			if (! ret) {
-				break;
-			}
-		} while (0);
-
-		if (! _spiCs(true)) {
-			ret = false;
-		}
-	}
-#else
 	Spi::Messages msgs;
 
 	{
@@ -239,36 +201,9 @@ static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
 	}
 
 	spiDev->transfer(msgs);
-#endif
 
 	return ret;
 }
-
-#if 0
-static bool _spiFlashChipErase() {
-	bool ret = true;
-
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			uint8_t tx[] = {
-				0xC7 // CE
-			};
-
-			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
-			if (! ret) {
-				break;
-			}
-		} while (0);
-
-		if (! _spiCs(true)) {
-			ret = false;
-		}
-	}
-
-	return ret;
-}
-#endif
 
 
 static bool _spiFlashBlockErase(uint32_t address) {
@@ -276,28 +211,6 @@ static bool _spiFlashBlockErase(uint32_t address) {
 
 	PRINTF(("Erasign block at address: %08x", address));
 
-#if 0
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			uint8_t tx[] = {
-				0xd8, // BE
-				static_cast<uint8_t>((address >> 16) & 0xff),
-				static_cast<uint8_t>((address >>  8) & 0xff),
-				static_cast<uint8_t>((address >>  0) & 0xff)
-			};
-
-			ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
-			if (! ret) {
-				break;
-			}
-		} while (0);
-
-		if (! _spiCs(true)) {
-			ret = false;
-		}
-	}
-#else
 	Spi::Messages msgs;
 
 	{
@@ -305,13 +218,13 @@ static bool _spiFlashBlockErase(uint32_t address) {
 
 		msg.send()
 			.byte(0xD8) // Block erase (BE)
-			.byte(static_cast<uint8_t>((address >> 16) & 0xff))
-			.byte(static_cast<uint8_t>((address >>  8) & 0xff))
-			.byte(static_cast<uint8_t>((address >>  0) & 0xff));
+
+			.byte((address >> 16) & 0xff)
+			.byte((address >>  8) & 0xff)
+			.byte((address >>  0) & 0xff);
 	}
 
 	spiDev->transfer(msgs);
-#endif
 
 	return ret;
 }
@@ -348,30 +261,6 @@ bool _spiFlashPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 
 	PRINTF(("Writing page at address: %08x", address));
 
-#if 0
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			uint8_t tx[4 + bufferSize];
-
-			tx[0] = 0x02; // PP
-			tx[1] = (address >> 16) & 0xff;
-			tx[2] = (address >>  8) & 0xff;
-			tx[3] = (address >>  0) & 0xff;
-
-			memcpy(tx + 4, buffer, bufferSize);
-
-			ret = _spiTransfer(tx, 4 + bufferSize, NULL, 0, NULL);
-			if (! ret) {
-				break;
-			}
-		} while (0);
-
-		if (! _spiCs(true)) {
-			ret = false;
-		}
-	}
-#else
 	Spi::Messages msgs;
 
 	{
@@ -388,7 +277,6 @@ bool _spiFlashPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 	}
 
 	spiDev->transfer(msgs);
-#endif
 
 	return ret;
 }
@@ -401,52 +289,6 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 
 	DBG(("Reading %lu bytes from address: %08x", bufferSize, address));
 
-#if 0
-	ret = _spiCs(false);
-	if (ret) {
-		do {
-			{
-				uint8_t tx[] = {
-					0x03, // Read
-					static_cast<uint8_t>((address >> 16) & 0xff), // Address
-					static_cast<uint8_t>((address >>  8) & 0xff),
-					static_cast<uint8_t>((address >>  0) & 0xff)
-				};
-
-				ret = _spiTransfer(tx, sizeof(tx), NULL, 0, NULL);
-				if (! ret) {
-					break;
-				}
-			}
-
-			uint8_t rx[PAGE_SIZE];
-			size_t rxWritten;
-
-			while (bufferSize > 0) {
-				uint16_t toRead = bufferSize >= PAGE_SIZE ? PAGE_SIZE : PAGE_SIZE - bufferSize;
-
-				ret = _spiTransfer(NULL, 0, rx, toRead, &rxWritten);
-				if (! ret) {
-					break;
-				}
-
-				memcpy(buffer + *bufferWritten, rx, toRead);
-
-				*bufferWritten = *bufferWritten + toRead;
-
-				bufferSize -= toRead;
-			}
-
-			if (! ret) {
-				break;
-			}
-		} while (0);
-
-		if (! _spiCs(true)) {
-			ret = false;
-		}
-	}
-#else
 	Spi::Messages msgs;
 
 	{
@@ -487,7 +329,6 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 		}
 		spiDev->chipSelect(false);
 	}
-#endif
 
 	return ret;
 }
@@ -905,7 +746,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (params.read || params.readBlock || params.readSector) {
-				if (! params.outpuFile.is_open()) {
+				if (! params.outFd) {
 					PRINTF(("Reading requested but output file was not defined!"));
 
 					ret = 1;

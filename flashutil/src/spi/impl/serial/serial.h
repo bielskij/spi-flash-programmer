@@ -1,26 +1,29 @@
-#ifndef FLASHUTIL_INCLUDE_SERIAL_H_
-#define FLASHUTIL_INCLUDE_SERIAL_H_
+/*
+ * serial.h
+ *
+ *  Created on: 6 mar 2023
+ *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
+ */
 
-#include <stdbool.h>
-#include <stdint.h>
+#ifndef SPI_IMPL_SERIAL_SERIAL_H_
+#define SPI_IMPL_SERIAL_SERIAL_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <memory>
+#include <string>
 
-typedef struct _Serial {
-	bool (*write)(struct _Serial *self, void *buffer, size_t bufferSize, int timeoutMs);
+class Serial {
+	public:
+		Serial(const std::string &serialPath, int baud);
+		virtual ~Serial();
 
-	bool (*readByte)(struct _Serial *self, uint8_t *value, int timeoutMs);
-} Serial;
+	public:
+		void write(void *buffer, std::size_t bufferSize, int timeoutMs);
+		uint8_t readByte(int timeoutMs);
 
+	private:
+		class Impl;
 
-Serial *new_serial(const char *serialPath, int baud);
+		std::unique_ptr<Impl> self;
+};
 
-void free_serial(Serial *serial);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* FLASHUTIL_INCLUDE_SERIAL_H_ */
+#endif /* SPI_IMPL_SERIAL_SERIAL_H_ */

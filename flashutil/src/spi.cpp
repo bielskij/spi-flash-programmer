@@ -1,10 +1,3 @@
-/*
- * spi.cpp
- *
- *  Created on: 6 mar 2023
- *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
- */
-
 #include "spi.h"
 
 
@@ -47,7 +40,7 @@ Spi::Message::SendOpts &Spi::Message::SendOpts::reset() {
 
 
 Spi::Message::RecvOpts &Spi::Message::RecvOpts::skip(std::size_t count) {
-	size_t pos = this->_data.size();
+	std::size_t pos = this->_data.size();
 
 	for (auto &skip : this->_skips) {
 		pos += skip.second;

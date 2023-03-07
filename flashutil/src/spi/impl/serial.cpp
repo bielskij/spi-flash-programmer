@@ -1,10 +1,10 @@
 #include <cstring>
 
-#include "serial.h"
-#include "serial/serial.h"
-
 #include "crc8.h"
 #include "protocol.h"
+
+#include "serial.h"
+#include "serial/serial.h"
 
 //#define DEBUG 1
 #include "debug.h"
@@ -14,20 +14,21 @@
 
 
 struct SerialSpi::Impl {
-	Serial *serial;
+	std::unique_ptr<Serial> serial;
 
 	Impl(const std::string &path, int baudrate) {
-		this->serial = new_serial(path.c_str(), baudrate);
-	}
-
-	~Impl() {
-		free_serial(this->serial);
+		this->serial.reset(new Serial(path, baudrate));
 	}
 };
 
 
 SerialSpi::SerialSpi(const std::string &path, int baudrate) {
 	this->self.reset(new SerialSpi::Impl(path, baudrate));
+}
+
+
+SerialSpi::~SerialSpi() {
+
 }
 
 
@@ -103,10 +104,7 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 //			debug_dumpBuffer(txData, txDataSize, 32, 0);
 
-			ret = self->serial->write(self->serial, txData, txDataSize, TIMEOUT_MS);
-			if (! ret) {
-				break;
-			}
+			self->serial->write(txData, txDataSize, TIMEOUT_MS);
 		}
 
 		// Receive
@@ -116,10 +114,7 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 			// sync
 			{
-				ret = self->serial->readByte(self->serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
+				tmp = self->serial->readByte(TIMEOUT_MS);
 
 				ret = tmp == PROTO_SYNC_BYTE;
 				if (! ret) {
@@ -132,10 +127,7 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 			// code
 			{
-				ret = self->serial->readByte(self->serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
+				tmp = self->serial->readByte(TIMEOUT_MS);
 
 				if (tmp != PROTO_NO_ERROR) {
 					ERR(("Received error! (%#02x)", tmp));
@@ -149,10 +141,7 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 				uint16_t dataLen = 0;
 
 				for (int i = 0; i < 2; i++) {
-					ret = self->serial->readByte(self->serial, &tmp, TIMEOUT_MS);
-					if (! ret) {
-						break;
-					}
+					tmp = self->serial->readByte(TIMEOUT_MS);
 
 					dataLen |= (tmp << (8 * (1 - i)));
 
@@ -165,10 +154,7 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 				// Data
 				for (uint16_t i = 0; i < dataLen; i++) {
-					ret = self->serial->readByte(self->serial, &tmp, TIMEOUT_MS);
-					if (! ret) {
-						break;
-					}
+					tmp = self->serial->readByte(TIMEOUT_MS);
 
 					crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
 
@@ -190,10 +176,7 @@ bool SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 			// CRC
 			{
-				ret = self->serial->readByte(self->serial, &tmp, TIMEOUT_MS);
-				if (! ret) {
-					break;
-				}
+				tmp = self->serial->readByte(TIMEOUT_MS);
 
 				ret = tmp == crc;
 				if (! ret) {
