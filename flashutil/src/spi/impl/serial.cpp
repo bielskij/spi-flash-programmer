@@ -46,8 +46,6 @@ void SerialSpi::transfer(Messages &msgs) {
 		const size_t rxSize = msg.recv().getBytes() + msg.recv().getSkips();
 		const size_t txSize = msg.send().getBytes();
 
-		size_t rxWritten;
-
 		uint8_t txBuffer[txSize];
 		uint8_t rxBuffer[rxSize];
 
@@ -57,14 +55,14 @@ void SerialSpi::transfer(Messages &msgs) {
 			this->spiCs(false);
 		}
 
-		this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, &rxWritten);
+		this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize);
 
 		{
 			std::size_t dstOffset = 0;
 
 			auto skipIndex = msg.recv().getSkipMap();
 
-			for (int i = 0; i < rxWritten; i++) {
+			for (int i = 0; i < rxSize; i++) {
 				if (skipIndex.find(i) != skipIndex.end()) {
 					continue;
 				}
@@ -80,12 +78,8 @@ void SerialSpi::transfer(Messages &msgs) {
 }
 
 
-void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize, size_t *responseWritten) {
-	DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd, %p", cmd, cmd, data, dataSize, response, responseSize, responseWritten));
-
-	if (responseWritten != NULL) {
-		*responseWritten = 0;
-	}
+void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize) {
+	DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd", cmd, cmd, data, dataSize, response, responseSize));
 
 	// Send
 	{
@@ -157,10 +151,6 @@ void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 					if (response != NULL) {
 						response[i] = tmp;
 					}
-
-					if (responseWritten != NULL) {
-						*responseWritten += 1;
-					}
 				}
 			}
 		}
@@ -180,11 +170,11 @@ void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 
 void SerialSpi::spiCs(bool high) {
-	this->cmdExecute(high ? PROTO_CMD_SPI_CS_HI : PROTO_CMD_SPI_CS_LO, NULL, 0, NULL, 0, NULL);
+	this->cmdExecute(high ? PROTO_CMD_SPI_CS_HI : PROTO_CMD_SPI_CS_LO, NULL, 0, NULL, 0);
 }
 
 
-void SerialSpi::spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, size_t *rxWritten) {
+void SerialSpi::spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize) {
 	uint16_t buffSize = 4 + txSize;
 	uint8_t  buff[buffSize];
 
@@ -195,5 +185,5 @@ void SerialSpi::spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t 
 
 	memcpy(&buff[4], tx, txSize);
 
-	this->cmdExecute(PROTO_CMD_SPI_TRANSFER, buff, buffSize, rx, rxSize, rxWritten);
+	this->cmdExecute(PROTO_CMD_SPI_TRANSFER, buff, buffSize, rx, rxSize);
 }

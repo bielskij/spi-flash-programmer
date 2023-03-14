@@ -559,180 +559,93 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		{
-			SpiCreator creator;
+		try {
+			{
+				SpiCreator creator;
 
-			spiDev = creator.createSerialSpi(params.serialPort, params.baud);
-		}
-
-		{
-			const SpiFlashDevice *dev = NULL;
-
-			SpiFlashInfo info;
-			SpiFlashStatus status;
-
-			if (! _spiFlashGetInfo(&info)) {
-				PRINTF(("Failure: Programmer is not responding!"));
-				break;
+				spiDev = creator.createSerialSpi(params.serialPort, params.baud);
 			}
 
-			if (
-				((info.deviceId[0] == 0xff) && (info.deviceId[0] == 0xff) && (info.manufacturerId == 0xff)) ||
-				((info.deviceId[0] == 0x00) && (info.deviceId[0] == 0x00) && (info.manufacturerId == 0x00))
-			) {
-				PRINTF(("No flash device detected!"));
+			{
+				const SpiFlashDevice *dev = NULL;
 
-				break;
-			}
+				SpiFlashInfo info;
+				SpiFlashStatus status;
 
-			for (int i = 0; i < flashDevicesCount; i++) {
-				const SpiFlashDevice *ip = &flashDevices[i];
+				if (! _spiFlashGetInfo(&info)) {
+					PRINTF(("Failure: Programmer is not responding!"));
+					break;
+				}
 
 				if (
-					(ip->id[0] == info.manufacturerId) &&
-					(ip->id[1] == info.deviceId[0]) &&
-					(ip->id[2] == info.deviceId[1])
+					((info.deviceId[0] == 0xff) && (info.deviceId[0] == 0xff) && (info.manufacturerId == 0xff)) ||
+					((info.deviceId[0] == 0x00) && (info.deviceId[0] == 0x00) && (info.manufacturerId == 0x00))
 				) {
-					dev = ip;
-					break;
-				}
-			}
+					PRINTF(("No flash device detected!"));
 
-			if (dev == NULL) {
-				ERR(("Unrecognized SPI flash device!"));
-
-				unknownDevice.id[0] = info.manufacturerId;
-				unknownDevice.id[1] = info.deviceId[0];
-				unknownDevice.id[2] = info.deviceId[1];
-
-				dev = &unknownDevice;
-			}
-
-			PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
-				dev->name.c_str(), dev->id[0], dev->id[1], dev->id[2],
-				dev->blockCount * dev->blockSize, dev->blockCount, dev->blockSize / 1024,
-				dev->sectorCount, dev->sectorSize
-			));
-
-			if (! _spiFlashGetStatus(&status)) {
-				break;
-			}
-
-			DBG(("status reg: %02x", status.raw));
-
-			if ((status.raw & dev->protectMask) != 0) {
-				PRINTF(("Flash is protected!"));
-			}
-
-			if (params.erase && params.eraseBlock) {
-				params.eraseBlock = false;
-			}
-
-			if (params.unprotect) {
-				if (dev->protectMask == 0) {
-					PRINTF(("Unprotect requested but device do not support it!"));
-
-				} else if ((dev->protectMask & status.raw) == 0) {
-					PRINTF(("Chip is already unprotected!"));
-
-				} else {
-					PRINTF(("Unprotecting flash"));
-
-					status.raw &= ~dev->protectMask;
-
-					if (! _spiFlashWriteEnable()) {
-						break;
-					}
-
-					if (! _spiFlashWriteStatusRegister(&status)) {
-						break;
-					}
-
-					if (! _spiFlashWriteWait(&status, 100)) {
-						break;
-					}
-
-					if ((status.raw & dev->protectMask) != 0) {
-						PRINTF(("Cannot unprotect the device!"));
-
-						break;
-					}
-
-					PRINTF(("Flash unprotected"));
-				}
-			}
-
-			if (params.erase) {
-				for (int block = 0; block < dev->blockCount; block++) {
-					if (! _spiFlashWriteEnable()) {
-						ret = 1;
-						break;
-					}
-
-					if (! _spiFlashBlockErase(block * dev->blockSize)) {
-						ret = 1;
-						break;
-					}
-
-					if (! _spiFlashWriteWait(&status, 100)) {
-						ret = 1;
-						break;
-					}
-				}
-			}
-
-			if (params.eraseBlock) {
-				if (params.idx >= dev->blockCount) {
-					PRINTF(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
-
-					ret = 1;
 					break;
 				}
 
-				if (! _spiFlashWriteEnable()) {
-					ret = 1;
+				for (int i = 0; i < flashDevicesCount; i++) {
+					const SpiFlashDevice *ip = &flashDevices[i];
+
+					if (
+						(ip->id[0] == info.manufacturerId) &&
+						(ip->id[1] == info.deviceId[0]) &&
+						(ip->id[2] == info.deviceId[1])
+					) {
+						dev = ip;
+						break;
+					}
+				}
+
+				if (dev == NULL) {
+					ERR(("Unrecognized SPI flash device!"));
+
+					unknownDevice.id[0] = info.manufacturerId;
+					unknownDevice.id[1] = info.deviceId[0];
+					unknownDevice.id[2] = info.deviceId[1];
+
+					dev = &unknownDevice;
+				}
+
+				PRINTF(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
+					dev->name.c_str(), dev->id[0], dev->id[1], dev->id[2],
+					dev->blockCount * dev->blockSize, dev->blockCount, dev->blockSize / 1024,
+					dev->sectorCount, dev->sectorSize
+				));
+
+				if (! _spiFlashGetStatus(&status)) {
 					break;
 				}
 
-				if (! _spiFlashBlockErase(params.idx * dev->blockSize)) {
-					ret = 1;
-					break;
+				DBG(("status reg: %02x", status.raw));
+
+				if ((status.raw & dev->protectMask) != 0) {
+					PRINTF(("Flash is protected!"));
 				}
 
-				if (! _spiFlashWriteWait(&status, 100)) {
-					ret = 1;
-					break;
-				}
-			}
-
-			if (params.write) {
-				std::array<uint8_t, PAGE_SIZE> pageBuffer;
-				size_t  pageWritten;
-				uint32_t address = 0;
-
-				if (! params.inFd) {
-					PRINTF(("Writing requested but input file was not defined!"));
-
-					ret = 1;
-					break;
+				if (params.erase && params.eraseBlock) {
+					params.eraseBlock = false;
 				}
 
-				do {
-					params.inFd->read(reinterpret_cast<char *>(pageBuffer.data()), pageBuffer.size());
+				if (params.unprotect) {
+					if (dev->protectMask == 0) {
+						PRINTF(("Unprotect requested but device do not support it!"));
 
-					if (*params.inFd) {
-						pageWritten = pageBuffer.size();
+					} else if ((dev->protectMask & status.raw) == 0) {
+						PRINTF(("Chip is already unprotected!"));
 
 					} else {
-						pageWritten = params.inFd->gcount();
-					}
+						PRINTF(("Unprotecting flash"));
 
-					if (pageWritten > 0) {
+						status.raw &= ~dev->protectMask;
+
 						if (! _spiFlashWriteEnable()) {
 							break;
 						}
 
-						if (! _spiFlashPageWrite(address, pageBuffer.data(), pageWritten)) {
+						if (! _spiFlashWriteStatusRegister(&status)) {
 							break;
 						}
 
@@ -740,130 +653,223 @@ int main(int argc, char *argv[]) {
 							break;
 						}
 
-						address += pageWritten;
+						if ((status.raw & dev->protectMask) != 0) {
+							PRINTF(("Cannot unprotect the device!"));
+
+							break;
+						}
+
+						PRINTF(("Flash unprotected"));
 					}
-				} while (pageWritten > 0);
-			}
-
-			if (params.read || params.readBlock || params.readSector) {
-				if (! params.outFd) {
-					PRINTF(("Reading requested but output file was not defined!"));
-
-					ret = 1;
-					break;
-				}
-			}
-
-			if (params.read) {
-				size_t   flashImageSize    = dev->blockSize * dev->blockCount;
-				size_t   flashImageWritten = 0;
-
-				std::unique_ptr<uint8_t[]> flashImage;
-
-				if (flashImageSize == 0) {
-					PRINTF(("Flash size is unknown!"));
-					break;
 				}
 
-				PRINTF(("Reading whole flash"));
+				if (params.erase) {
+					for (int block = 0; block < dev->blockCount; block++) {
+						if (! _spiFlashWriteEnable()) {
+							ret = 1;
+							break;
+						}
 
-				flashImage.reset(new uint8_t[flashImageSize]);
+						if (! _spiFlashBlockErase(block * dev->blockSize)) {
+							ret = 1;
+							break;
+						}
 
-				if (_spiFlashRead(0, flashImage.get(), flashImageSize, &flashImageWritten)) {
-					params.outFd->write(reinterpret_cast<char *>(flashImage.get()), flashImageWritten);
-				}
-
-			} else if (params.readBlock) {
-				uint8_t buffer[dev->blockSize];
-				size_t  bufferWritten;
-
-				if (params.idx >= dev->blockCount) {
-					PRINTF(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
-
-					ret = 1;
-					break;
-				}
-
-				PRINTF(("Reading block %u (%#lx)", params.idx, params.idx * dev->blockSize));
-
-				if (! _spiFlashRead(params.idx * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
-					break;
-				}
-
-				params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
-
-			} else if (params.readSector) {
-				uint8_t buffer[dev->sectorSize];
-				size_t  bufferWritten;
-
-				if (params.idx >= dev->sectorCount) {
-					PRINTF(("Sector index is out of bound! (%d >= %zd)", params.idx, dev->sectorCount));
-
-					ret = 1;
-					break;
-				}
-
-				PRINTF(("Reading sector %u (%#lx)", params.idx, params.idx * dev->sectorSize));
-
-				if (! _spiFlashRead(params.idx * dev->sectorSize, buffer, dev->sectorSize, &bufferWritten)) {
-					break;
-				}
-
-				params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
-			}
-
-			if (params.verify) {
-				uint8_t referenceBuffer[dev->blockSize];
-				uint8_t buffer[dev->blockSize];
-				size_t  bufferWritten;
-				int     blockNo = 0;
-
-				if (params.write) {
-					params.inFd->clear();
-					params.inFd->seekg(0, std::ios::beg);
-
-				} else {
-					memset(referenceBuffer, 0xff, dev->blockSize);
-				}
-
-				while (blockNo < dev->blockCount) {
-					size_t compareSize = 0;
-
-					if (params.inFd) {
-						params.inFd->read(reinterpret_cast<char *>(referenceBuffer), dev->blockSize);
-
-						if (*params.inFd) {
-							compareSize = dev->blockSize;
-
-						} else {
-							compareSize = params.inFd->gcount();
+						if (! _spiFlashWriteWait(&status, 100)) {
+							ret = 1;
+							break;
 						}
 					}
+				}
 
-					if (compareSize <= 0) {
-						break;
-					}
+				if (params.eraseBlock) {
+					if (params.idx >= dev->blockCount) {
+						PRINTF(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
 
-					PRINTF(("Verifying block %d", blockNo));
-
-					if (! _spiFlashRead(blockNo * dev->blockSize, buffer, compareSize, &bufferWritten)) {
 						ret = 1;
 						break;
 					}
 
-					if (memcmp(buffer, referenceBuffer, bufferWritten) == 0) {
-						PRINTF(("Verification of block %d -> SUCCESS", blockNo));
+					if (! _spiFlashWriteEnable()) {
+						ret = 1;
+						break;
+					}
+
+					if (! _spiFlashBlockErase(params.idx * dev->blockSize)) {
+						ret = 1;
+						break;
+					}
+
+					if (! _spiFlashWriteWait(&status, 100)) {
+						ret = 1;
+						break;
+					}
+				}
+
+				if (params.write) {
+					std::array<uint8_t, PAGE_SIZE> pageBuffer;
+					size_t  pageWritten;
+					uint32_t address = 0;
+
+					if (! params.inFd) {
+						PRINTF(("Writing requested but input file was not defined!"));
+
+						ret = 1;
+						break;
+					}
+
+					do {
+						params.inFd->read(reinterpret_cast<char *>(pageBuffer.data()), pageBuffer.size());
+
+						if (*params.inFd) {
+							pageWritten = pageBuffer.size();
+
+						} else {
+							pageWritten = params.inFd->gcount();
+						}
+
+						if (pageWritten > 0) {
+							if (! _spiFlashWriteEnable()) {
+								break;
+							}
+
+							if (! _spiFlashPageWrite(address, pageBuffer.data(), pageWritten)) {
+								break;
+							}
+
+							if (! _spiFlashWriteWait(&status, 100)) {
+								break;
+							}
+
+							address += pageWritten;
+						}
+					} while (pageWritten > 0);
+				}
+
+				if (params.read || params.readBlock || params.readSector) {
+					if (! params.outFd) {
+						PRINTF(("Reading requested but output file was not defined!"));
+
+						ret = 1;
+						break;
+					}
+				}
+
+				if (params.read) {
+					size_t   flashImageSize    = dev->blockSize * dev->blockCount;
+					size_t   flashImageWritten = 0;
+
+					std::unique_ptr<uint8_t[]> flashImage;
+
+					if (flashImageSize == 0) {
+						PRINTF(("Flash size is unknown!"));
+						break;
+					}
+
+					PRINTF(("Reading whole flash"));
+
+					flashImage.reset(new uint8_t[flashImageSize]);
+
+					if (_spiFlashRead(0, flashImage.get(), flashImageSize, &flashImageWritten)) {
+						params.outFd->write(reinterpret_cast<char *>(flashImage.get()), flashImageWritten);
+					}
+
+				} else if (params.readBlock) {
+					uint8_t buffer[dev->blockSize];
+					size_t  bufferWritten;
+
+					if (params.idx >= dev->blockCount) {
+						PRINTF(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
+
+						ret = 1;
+						break;
+					}
+
+					PRINTF(("Reading block %u (%#lx)", params.idx, params.idx * dev->blockSize));
+
+					if (! _spiFlashRead(params.idx * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
+						break;
+					}
+
+					params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
+
+				} else if (params.readSector) {
+					uint8_t buffer[dev->sectorSize];
+					size_t  bufferWritten;
+
+					if (params.idx >= dev->sectorCount) {
+						PRINTF(("Sector index is out of bound! (%d >= %zd)", params.idx, dev->sectorCount));
+
+						ret = 1;
+						break;
+					}
+
+					PRINTF(("Reading sector %u (%#lx)", params.idx, params.idx * dev->sectorSize));
+
+					if (! _spiFlashRead(params.idx * dev->sectorSize, buffer, dev->sectorSize, &bufferWritten)) {
+						break;
+					}
+
+					params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
+				}
+
+				if (params.verify) {
+					uint8_t referenceBuffer[dev->blockSize];
+					uint8_t buffer[dev->blockSize];
+					size_t  bufferWritten;
+					int     blockNo = 0;
+
+					if (params.write) {
+						params.inFd->clear();
+						params.inFd->seekg(0, std::ios::beg);
 
 					} else {
-						PRINTF(("Verification of block %d -> FAILED", blockNo));
-
-						ret = 1;
-						break;
+						memset(referenceBuffer, 0xff, dev->blockSize);
 					}
 
-					blockNo++;
+					while (blockNo < dev->blockCount) {
+						size_t compareSize = 0;
+
+						if (params.inFd) {
+							params.inFd->read(reinterpret_cast<char *>(referenceBuffer), dev->blockSize);
+
+							if (*params.inFd) {
+								compareSize = dev->blockSize;
+
+							} else {
+								compareSize = params.inFd->gcount();
+							}
+						}
+
+						if (compareSize <= 0) {
+							break;
+						}
+
+						PRINTF(("Verifying block %d", blockNo));
+
+						if (! _spiFlashRead(blockNo * dev->blockSize, buffer, compareSize, &bufferWritten)) {
+							ret = 1;
+							break;
+						}
+
+						if (memcmp(buffer, referenceBuffer, bufferWritten) == 0) {
+							PRINTF(("Verification of block %d -> SUCCESS", blockNo));
+
+						} else {
+							PRINTF(("Verification of block %d -> FAILED", blockNo));
+
+							ret = 1;
+							break;
+						}
+
+						blockNo++;
+					}
 				}
 			}
+		} catch (const std::exception &ex) {
+			PRINTF(("Got exception: %s", ex.what()));
+
+			ret = 1;
 		}
 	} while (0);
 
