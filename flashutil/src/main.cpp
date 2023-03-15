@@ -26,6 +26,7 @@
 #include "protocol.h"
 #include "spi.h"
 #include "spi/creator.h"
+#include "exception.h"
 #include "debug.h"
 
 
@@ -98,35 +99,29 @@ typedef struct _SpiFlashInfo {
 } SpiFlashInfo;
 
 
-bool _spiFlashGetInfo(SpiFlashInfo *info) {
-	bool ret = true;
+static void _flashCmdGetInfo(SpiFlashInfo *info) {
+	Spi::Messages msgs;
 
 	{
-		Spi::Messages msgs;
+		auto &msg = msgs.add();
 
-		{
-			auto &msg = msgs.add();
+		msg.send()
+			.byte(0x9f);
 
-			msg.send()
-				.byte(0x9f);
-
-			msg.recv()
-				.skip(1)
-				.bytes(3);
-		}
-
-		spiDev->transfer(msgs);
-
-		{
-			auto &recv = msgs.at(0).recv();
-
-			info->manufacturerId = recv.at(0);
-			info->deviceId[0]    = recv.at(1);
-			info->deviceId[1]    = recv.at(2);
-		}
+		msg.recv()
+			.skip(1)
+			.bytes(3);
 	}
 
-	return ret;
+	spiDev->transfer(msgs);
+
+	{
+		auto &recv = msgs.at(0).recv();
+
+		info->manufacturerId = recv.at(0);
+		info->deviceId[0]    = recv.at(1);
+		info->deviceId[1]    = recv.at(2);
+	}
 }
 
 
@@ -140,38 +135,30 @@ typedef struct _SpiFlashStatus {
 #define STATUS_FLAG_WLE 0x02
 #define STATUS_FLAG_WIP 0x01
 
-bool _spiFlashGetStatus(SpiFlashStatus *status) {
-	bool ret = true;
+static void _flashCmdGetStatus(SpiFlashStatus *status) {
+	Spi::Messages msgs;
 
 	{
-		Spi::Messages msgs;
+		auto &msg = msgs.add();
 
-		{
-			auto &msg = msgs.add();
+		msg.send()
+			.byte(0x05); // RDSR
 
-			msg.send()
-				.byte(0x05); // RDSR
-
-			msg.recv()
-				.skip(1)
-				.bytes(1);
-		}
-
-		spiDev->transfer(msgs);
-
-		status->raw = msgs.at(0).recv().at(0);
-
-		status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
-		status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
+		msg.recv()
+			.skip(1)
+			.bytes(1);
 	}
 
-	return ret;
+	spiDev->transfer(msgs);
+
+	status->raw = msgs.at(0).recv().at(0);
+
+	status->writeEnableLatch = (status->raw & STATUS_FLAG_WLE) != 0;
+	status->writeInProgress  = (status->raw & STATUS_FLAG_WIP) != 0;
 }
 
 
-static bool _spiFlashWriteEnable() {
-	bool ret = true;
-
+static void _flashCmdWriteEnable() {
 	Spi::Messages msgs;
 
 	{
@@ -182,14 +169,10 @@ static bool _spiFlashWriteEnable() {
 	}
 
 	spiDev->transfer(msgs);
-
-	return ret;
 }
 
 
-static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
-	bool ret = true;
-
+static void _flashCmdWriteStatusRegister(SpiFlashStatus *status) {
 	Spi::Messages msgs;
 
 	{
@@ -201,17 +184,13 @@ static bool _spiFlashWriteStatusRegister(SpiFlashStatus *status) {
 	}
 
 	spiDev->transfer(msgs);
-
-	return ret;
 }
 
 
-static bool _spiFlashBlockErase(uint32_t address) {
-	bool ret = true;
-
-	PRINTF(("Erasign block at address: %08x", address));
-
+static void _flashCmdEraseBlock(uint32_t address) {
 	Spi::Messages msgs;
+
+	PRINTF(("Erasing block at address: %08x", address));
 
 	{
 		auto &msg = msgs.add();
@@ -225,19 +204,32 @@ static bool _spiFlashBlockErase(uint32_t address) {
 	}
 
 	spiDev->transfer(msgs);
-
-	return ret;
 }
 
 
-static bool _spiFlashWriteWait(SpiFlashStatus *status, int timeIntervalMs) {
-	bool ret = true;
+static void _flashCmdEraseSector(uint32_t address) {
+	Spi::Messages msgs;
 
+	PRINTF(("Erasing sector at address: %08x", address));
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x20) // Sector erase (SE)
+
+			.byte((address >> 16) & 0xff)
+			.byte((address >>  8) & 0xff)
+			.byte((address >>  0) & 0xff);
+	}
+
+	spiDev->transfer(msgs);
+}
+
+
+static void _flashWriteWait(SpiFlashStatus *status, int timeIntervalMs) {
 	do {
-		ret = _spiFlashGetStatus(status);
-		if (! ret) {
-			break;
-		}
+		_flashCmdGetStatus(status);
 
 		if (status->writeInProgress) {
 			struct timespec tv;
@@ -248,20 +240,16 @@ static bool _spiFlashWriteWait(SpiFlashStatus *status, int timeIntervalMs) {
 			nanosleep(&tv, NULL);
 		}
 	} while (status->writeInProgress);
-
-	return ret;
 }
 
 
 #define PAGE_SIZE 256
 
 
-bool _spiFlashPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
-	bool ret = true;
+static void _flashCmdPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
+	Spi::Messages msgs;
 
 	PRINTF(("Writing page at address: %08x", address));
-
-	Spi::Messages msgs;
 
 	{
 		auto &msg = msgs.add();
@@ -277,19 +265,15 @@ bool _spiFlashPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 	}
 
 	spiDev->transfer(msgs);
-
-	return ret;
 }
 
 
-bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t *bufferWritten) {
-	bool ret = true;
-
-	*bufferWritten = 0;
+static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t *bufferWritten) {
+	Spi::Messages msgs;
 
 	DBG(("Reading %lu bytes from address: %08x", bufferSize, address));
 
-	Spi::Messages msgs;
+	*bufferWritten = 0;
 
 	{
 		auto &msg = msgs.add();
@@ -329,8 +313,6 @@ bool _spiFlashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t 
 		}
 		spiDev->chipSelect(false);
 	}
-
-	return ret;
 }
 
 
@@ -346,13 +328,19 @@ struct Parameters {
 
 	int baud;
 	int idx;
+
 	bool read;
 	bool readBlock;
 	bool readSector;
 
 	bool erase;
 	bool eraseBlock;
+	bool eraseSector;
+
 	bool write;
+	bool writeBlock;
+	bool writeSector;
+
 	bool verify;
 
 	bool unprotect;
@@ -361,17 +349,20 @@ struct Parameters {
 		this->outFd = nullptr;
 		this->inFd  = nullptr;
 
-		this->help       = false;
-		this->baud       = 1000000;
-		this->idx        = -1;
-		this->read       = false;
-		this->readBlock  = false;
-		this->readSector = false;
-		this->erase      = false;
-		this->eraseBlock = false;
-		this->write      = false;
-		this->verify     = false;
-		this->unprotect  = false;
+		this->help        = false;
+		this->baud        = 1000000;
+		this->idx         = -1;
+		this->read        = false;
+		this->readBlock   = false;
+		this->readSector  = false;
+		this->erase       = false;
+		this->eraseBlock  = false;
+		this->eraseSector = false;
+		this->write       = false;
+		this->writeBlock  = false;
+		this->writeSector = false;
+		this->verify      = false;
+		this->unprotect   = false;
 	}
 };
 
@@ -384,17 +375,22 @@ namespace po = boost::program_options;
 #define OPT_SERIAL  "serial"
 #define OPT_OUTPUT  "output"
 #define OPT_INPUT   "input"
-#define OPT_BAUD    "baud"
+#define OPT_BAUD    "serial-baud"
 
 #define OPT_READ       "read"
 #define OPT_READ_BLOCK "read-block"
-#define OPT_READ_SECT  "read-sector"
+#define OPT_READ_SECTOR  "read-sector"
 
-#define OPT_ERASE       "erase"
-#define OPT_ERASE_BLOCK "erase-block"
-#define OPT_WRITE       "write"
-#define OPT_VERIFY      "verify"
-#define OPT_UNPROTECT   "unprotect"
+#define OPT_ERASE        "erase"
+#define OPT_ERASE_BLOCK  "erase-block"
+#define OPT_ERASE_SECTOR "erase-sector"
+
+#define OPT_WRITE        "write"
+#define OPT_WRITE_BLOCK  "write-block"
+#define OPT_WRITE_SECTOR "write-sector"
+
+#define OPT_VERIFY       "verify"
+#define OPT_UNPROTECT    "unprotect"
 
 #define OPT_FLASH_DESC "flash-geometry"
 
@@ -418,16 +414,19 @@ int main(int argc, char *argv[]) {
 			opDesc.add_options()
 				(OPT_VERBOSE     ",v",                           "Verbose output")
 				(OPT_HELP        ",h",                           "Print usage message")
-				(OPT_SERIAL      ",p", po::value<std::string>(), "Serial port path")
+				(OPT_SERIAL      ",s", po::value<std::string>(), "Serial port path")
 				(OPT_OUTPUT      ",o", po::value<std::string>(), "Output file path or '-' for stdout")
 				(OPT_INPUT       ",i", po::value<std::string>(), "Input file path or '-' for stdin")
-				(OPT_BAUD        ",b", po::value<int>(),         "Serial port baudrate")
-				(OPT_READ        ",R",                           "Read to output file")
-				(OPT_READ_BLOCK  ",r", po::value<off_t>(),       "Read block at index")
-				(OPT_READ_SECT   ",S", po::value<off_t>(),       "Read Sector at index")
-				(OPT_ERASE       ",E",                           "Erase whole chip")
-				(OPT_ERASE_BLOCK ",e", po::value<off_t>(),       "Erase block at index")
-				(OPT_WRITE       ",W",                           "Write input file")
+				(OPT_BAUD,             po::value<int>(),         "Serial port baudrate")
+				(OPT_READ        ",r",                           "Read to output file")
+				(OPT_READ_BLOCK,       po::value<off_t>(),       "Read block at index")
+				(OPT_READ_SECTOR,      po::value<off_t>(),       "Read Sector at index")
+				(OPT_ERASE       ",e",                           "Erase whole chip")
+				(OPT_ERASE_BLOCK,      po::value<off_t>(),       "Erase block at index")
+				(OPT_ERASE_SECTOR,     po::value<off_t>(),       "Erase sector at index")
+				(OPT_WRITE       ",w",                           "Write input file")
+				(OPT_WRITE_BLOCK,                                "Write block from input file")
+				(OPT_WRITE_SECTOR,                               "Write sector from input file")
 				(OPT_VERIFY      ",V",                           "Verify writing process")
 				(OPT_UNPROTECT   ",u",                           "Unprotect the chip before doing any operation on it")
 				(OPT_FLASH_DESC  ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
@@ -461,10 +460,7 @@ int main(int argc, char *argv[]) {
 				} else {
 					params.outpuFile.open(output, std::ios::out | std::ios::trunc | std::ios::binary);
 					if (! params.outpuFile.is_open()) {
-						PRINTF(("Unable to open output file! (%s)", output.c_str()));
-
-						ret = 1;
-						break;
+						throw_Exception("Unable to open output file! (" + output + ")");
 					}
 
 					params.outFd = &params.outpuFile;
@@ -480,10 +476,7 @@ int main(int argc, char *argv[]) {
 				else {
 					params.inputFile.open(input, std::ios::in | std::ios::binary);
 					if (! params.inputFile.is_open()) {
-						PRINTF(("Unable to open input file! (%s)", input.c_str()));
-
-						ret = 1;
-						break;
+						throw_Exception("Unable to open input file! (" + input + ")");
 					}
 
 					params.inFd = &params.inputFile;
@@ -499,13 +492,23 @@ int main(int argc, char *argv[]) {
 				params.idx       = vm[OPT_READ_BLOCK].as<off_t>();
 			}
 
-			if (vm.count(OPT_READ_SECT)) {
+			if (vm.count(OPT_READ_SECTOR)) {
 				params.readSector = true;
-				params.idx        = vm[OPT_READ_SECT].as<off_t>();
+				params.idx        = vm[OPT_READ_SECTOR].as<off_t>();
 			}
 
 			if (vm.count(OPT_WRITE)) {
 				params.write = true;
+			}
+
+			if (vm.count(OPT_WRITE_BLOCK)) {
+				params.writeBlock = true;
+				params.idx        = vm[OPT_WRITE_BLOCK].as<off_t>();
+			}
+
+			if (vm.count(OPT_WRITE_SECTOR)) {
+				params.writeSector = true;
+				params.idx         = vm[OPT_WRITE_SECTOR].as<off_t>();
 			}
 
 			if (vm.count(OPT_ERASE)) {
@@ -515,6 +518,11 @@ int main(int argc, char *argv[]) {
 			if (vm.count(OPT_ERASE_BLOCK)) {
 				params.eraseBlock = true;
 				params.idx        = vm[OPT_ERASE_BLOCK].as<off_t>();
+			}
+
+			if (vm.count(OPT_ERASE_SECTOR)) {
+				params.eraseSector = true;
+				params.idx         = vm[OPT_ERASE_SECTOR].as<off_t>();
 			}
 
 			if (vm.count(OPT_VERIFY)) {
@@ -553,8 +561,7 @@ int main(int argc, char *argv[]) {
 				unknownDevice.protectMask = unprotectMask;
 
 				if (blockCount * blockSize != sectorCount * sectorSize) {
-					PRINTF(("Invalid flash-geometry, flash size calculated from blocks/sectors differs!"));
-					exit(1);
+					throw_Exception("Invalid flash-geometry, flash size calculated from blocks/sectors differs!");
 				}
 			}
 		}
@@ -572,18 +579,13 @@ int main(int argc, char *argv[]) {
 				SpiFlashInfo info;
 				SpiFlashStatus status;
 
-				if (! _spiFlashGetInfo(&info)) {
-					PRINTF(("Failure: Programmer is not responding!"));
-					break;
-				}
+				_flashCmdGetInfo(&info);
 
 				if (
 					((info.deviceId[0] == 0xff) && (info.deviceId[0] == 0xff) && (info.manufacturerId == 0xff)) ||
 					((info.deviceId[0] == 0x00) && (info.deviceId[0] == 0x00) && (info.manufacturerId == 0x00))
 				) {
-					PRINTF(("No flash device detected!"));
-
-					break;
+					throw_Exception("No flash device detected!");
 				}
 
 				for (int i = 0; i < flashDevicesCount; i++) {
@@ -615,9 +617,7 @@ int main(int argc, char *argv[]) {
 					dev->sectorCount, dev->sectorSize
 				));
 
-				if (! _spiFlashGetStatus(&status)) {
-					break;
-				}
+				_flashCmdGetStatus(&status);
 
 				DBG(("status reg: %02x", status.raw));
 
@@ -641,17 +641,9 @@ int main(int argc, char *argv[]) {
 
 						status.raw &= ~dev->protectMask;
 
-						if (! _spiFlashWriteEnable()) {
-							break;
-						}
-
-						if (! _spiFlashWriteStatusRegister(&status)) {
-							break;
-						}
-
-						if (! _spiFlashWriteWait(&status, 100)) {
-							break;
-						}
+						_flashCmdWriteEnable();
+						_flashCmdWriteStatusRegister(&status);
+						_flashWriteWait(&status, 100);
 
 						if ((status.raw & dev->protectMask) != 0) {
 							PRINTF(("Cannot unprotect the device!"));
@@ -665,50 +657,35 @@ int main(int argc, char *argv[]) {
 
 				if (params.erase) {
 					for (int block = 0; block < dev->blockCount; block++) {
-						if (! _spiFlashWriteEnable()) {
-							ret = 1;
-							break;
-						}
-
-						if (! _spiFlashBlockErase(block * dev->blockSize)) {
-							ret = 1;
-							break;
-						}
-
-						if (! _spiFlashWriteWait(&status, 100)) {
-							ret = 1;
-							break;
-						}
+						_flashCmdWriteEnable();
+						_flashCmdEraseBlock(block * dev->blockSize);
+						_flashWriteWait(&status, 100);
 					}
 				}
 
 				if (params.eraseBlock) {
 					if (params.idx >= dev->blockCount) {
-						PRINTF(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
-
-						ret = 1;
-						break;
+						throw_Exception("Block index is out of bounds! (" + std::to_string(params.idx) + " >= " + std::to_string(dev->blockCount) + ")");
 					}
 
-					if (! _spiFlashWriteEnable()) {
-						ret = 1;
-						break;
+					_flashCmdWriteEnable();
+					_flashCmdEraseBlock(params.idx * dev->blockSize);
+					_flashWriteWait(&status, 100);
+				}
+
+				if (params.eraseSector) {
+					if (params.idx >= dev->sectorCount) {
+						throw_Exception("Sector index is out of bounds! (" + std::to_string(params.idx) + " >= " + std::to_string(dev->sectorCount) + ")");
 					}
 
-					if (! _spiFlashBlockErase(params.idx * dev->blockSize)) {
-						ret = 1;
-						break;
-					}
-
-					if (! _spiFlashWriteWait(&status, 100)) {
-						ret = 1;
-						break;
-					}
+					_flashCmdWriteEnable();
+					_flashCmdEraseSector(params.idx * dev->sectorSize);
+					_flashWriteWait(&status, 100);
 				}
 
 				if (params.write) {
 					std::array<uint8_t, PAGE_SIZE> pageBuffer;
-					size_t  pageWritten;
+					size_t  toWriteSize;
 					uint32_t address = 0;
 
 					if (! params.inFd) {
@@ -722,28 +699,20 @@ int main(int argc, char *argv[]) {
 						params.inFd->read(reinterpret_cast<char *>(pageBuffer.data()), pageBuffer.size());
 
 						if (*params.inFd) {
-							pageWritten = pageBuffer.size();
+							toWriteSize = pageBuffer.size();
 
 						} else {
-							pageWritten = params.inFd->gcount();
+							toWriteSize = params.inFd->gcount();
 						}
 
-						if (pageWritten > 0) {
-							if (! _spiFlashWriteEnable()) {
-								break;
-							}
+						if (toWriteSize > 0) {
+							_flashCmdWriteEnable();
+							_flashCmdPageWrite(address, pageBuffer.data(), toWriteSize);
+							_flashWriteWait(&status, 100);
 
-							if (! _spiFlashPageWrite(address, pageBuffer.data(), pageWritten)) {
-								break;
-							}
-
-							if (! _spiFlashWriteWait(&status, 100)) {
-								break;
-							}
-
-							address += pageWritten;
+							address += toWriteSize;
 						}
-					} while (pageWritten > 0);
+					} while (toWriteSize > 0);
 				}
 
 				if (params.read || params.readBlock || params.readSector) {
@@ -770,9 +739,9 @@ int main(int argc, char *argv[]) {
 
 					flashImage.reset(new uint8_t[flashImageSize]);
 
-					if (_spiFlashRead(0, flashImage.get(), flashImageSize, &flashImageWritten)) {
-						params.outFd->write(reinterpret_cast<char *>(flashImage.get()), flashImageWritten);
-					}
+					_flashRead(0, flashImage.get(), flashImageSize, &flashImageWritten);
+
+					params.outFd->write(reinterpret_cast<char *>(flashImage.get()), flashImageWritten);
 
 				} else if (params.readBlock) {
 					uint8_t buffer[dev->blockSize];
@@ -787,9 +756,7 @@ int main(int argc, char *argv[]) {
 
 					PRINTF(("Reading block %u (%#lx)", params.idx, params.idx * dev->blockSize));
 
-					if (! _spiFlashRead(params.idx * dev->blockSize, buffer, dev->blockSize, &bufferWritten)) {
-						break;
-					}
+					_flashRead(params.idx * dev->blockSize, buffer, dev->blockSize, &bufferWritten);
 
 					params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
 
@@ -806,9 +773,7 @@ int main(int argc, char *argv[]) {
 
 					PRINTF(("Reading sector %u (%#lx)", params.idx, params.idx * dev->sectorSize));
 
-					if (! _spiFlashRead(params.idx * dev->sectorSize, buffer, dev->sectorSize, &bufferWritten)) {
-						break;
-					}
+					_flashRead(params.idx * dev->sectorSize, buffer, dev->sectorSize, &bufferWritten);
 
 					params.outFd->write(reinterpret_cast<char *>(buffer), bufferWritten);
 				}
@@ -847,10 +812,7 @@ int main(int argc, char *argv[]) {
 
 						PRINTF(("Verifying block %d", blockNo));
 
-						if (! _spiFlashRead(blockNo * dev->blockSize, buffer, compareSize, &bufferWritten)) {
-							ret = 1;
-							break;
-						}
+						_flashRead(blockNo * dev->blockSize, buffer, compareSize, &bufferWritten);
 
 						if (memcmp(buffer, referenceBuffer, bufferWritten) == 0) {
 							PRINTF(("Verification of block %d -> SUCCESS", blockNo));
