@@ -64,7 +64,7 @@ BLOCK_TEST_PATH=$(mktemp)
 TMP_PATH=$(mktemp)
 
 head -c ${FLASH_BLOCK_SIZE} /dev/zero | tr "\000" "\377" > ${BLOCK_ERASED_PATH}
-head -c ${FLASH_BLOCK_SIZE} /dev/urandom > ${BLOCK_TEST_PATH}
+cp ${BLOCK_ERASED_PATH} ${BLOCK_TEST_PATH}
 
 head -c ${FLASH_PAGE_SIZE}  /dev/zero | tr "\000" "\377" > ${PAGE_ERASED_PATH}
 head -c ${FLASH_PAGE_SIZE}  /dev/urandom > ${PAGE_TEST_PATH}
@@ -82,6 +82,10 @@ else
 fi
 
 log "Writing test page"
+
+cat ${PAGE_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${TEST_PAGE_OFFSET} * ${FLASH_PAGE_SIZE} ))
+
+hexdump -C ${BLOCK_TEST_PATH}
 
 #${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} 
 
