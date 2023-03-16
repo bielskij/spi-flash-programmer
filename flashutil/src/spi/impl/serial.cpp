@@ -26,6 +26,9 @@ struct SerialSpi::Impl {
 
 SerialSpi::SerialSpi(const std::string &path, int baudrate) {
 	this->self.reset(new SerialSpi::Impl(path, baudrate));
+
+	// Be sure CS pin is released.
+	this->chipSelect(false);
 }
 
 
