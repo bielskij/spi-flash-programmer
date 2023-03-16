@@ -99,6 +99,13 @@ typedef struct _SpiFlashInfo {
 } SpiFlashInfo;
 
 
+static std::ifstream::pos_type _fileSize(const char* filename) {
+	std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
+
+	return in.tellg();
+}
+
+
 static void _flashCmdGetInfo(SpiFlashInfo *info) {
 	Spi::Messages msgs;
 
@@ -268,12 +275,10 @@ static void _flashCmdPageWrite(uint32_t address, uint8_t *buffer, size_t bufferS
 }
 
 
-static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, size_t *bufferWritten) {
+static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 	Spi::Messages msgs;
 
 	DBG(("Reading %lu bytes from address: %08x", bufferSize, address));
-
-	*bufferWritten = 0;
 
 	{
 		auto &msg = msgs.add();
@@ -290,6 +295,8 @@ static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, siz
 
 		spiDev->chipSelect(true);
 		{
+			uint32_t bufferWritten = 0;
+
 			spiDev->transfer(msgs);
 
 			msg
@@ -304,11 +311,10 @@ static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize, siz
 
 				spiDev->transfer(msgs);
 
-				memcpy(buffer + *bufferWritten, msgs.at(0).recv().data(), toRead);
+				memcpy(buffer + bufferWritten, msgs.at(0).recv().data(), toRead);
 
-				*bufferWritten = *bufferWritten + toRead;
-
-				bufferSize -= toRead;
+				bufferWritten += toRead;
+				bufferSize    -= toRead;
 			}
 		}
 		spiDev->chipSelect(false);
@@ -344,25 +350,27 @@ struct Parameters {
 	bool verify;
 
 	bool unprotect;
+	bool omitRedundantOps;
 
 	Parameters() {
 		this->outFd = nullptr;
 		this->inFd  = nullptr;
 
-		this->help        = false;
-		this->baud        = 1000000;
-		this->idx         = -1;
-		this->read        = false;
-		this->readBlock   = false;
-		this->readSector  = false;
-		this->erase       = false;
-		this->eraseBlock  = false;
-		this->eraseSector = false;
-		this->write       = false;
-		this->writeBlock  = false;
-		this->writeSector = false;
-		this->verify      = false;
-		this->unprotect   = false;
+		this->help             = false;
+		this->baud             = 1000000;
+		this->idx              = -1;
+		this->read             = false;
+		this->readBlock        = false;
+		this->readSector       = false;
+		this->erase            = false;
+		this->eraseBlock       = false;
+		this->eraseSector      = false;
+		this->write            = false;
+		this->writeBlock       = false;
+		this->writeSector      = false;
+		this->verify           = false;
+		this->unprotect        = false;
+		this->omitRedundantOps = false;
 	}
 };
 
@@ -393,6 +401,7 @@ namespace po = boost::program_options;
 #define OPT_UNPROTECT    "unprotect"
 
 #define OPT_FLASH_DESC "flash-geometry"
+#define OPT_OMIT_REDUNDANT_OPS "no-redudant-cycles"
 
 
 static void _usage(const po::options_description &opts) {
@@ -430,6 +439,7 @@ int main(int argc, char *argv[]) {
 				(OPT_VERIFY      ",V",                           "Verify writing process")
 				(OPT_UNPROTECT   ",u",                           "Unprotect the chip before doing any operation on it")
 				(OPT_FLASH_DESC  ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+				(OPT_OMIT_REDUNDANT_OPS,                         "Prevent from redundant erase/write cycles");
 				;
 
 			po::variables_map vm;
@@ -657,20 +667,82 @@ int main(int argc, char *argv[]) {
 
 				if (params.erase) {
 					for (int block = 0; block < dev->blockCount; block++) {
-						_flashCmdWriteEnable();
-						_flashCmdEraseBlock(block * dev->blockSize);
-						_flashWriteWait(&status, 100);
+						uint32_t blockAddress = block * dev->blockSize;
+						bool     needErase    = ! params.omitRedundantOps;
+
+						if (! needErase) {
+							uint8_t pageBuffer[dev->pageSize];
+
+							for (int page = 0; page < dev->blockSize / dev->pageSize; page++) {
+								_flashRead(blockAddress + page * dev->pageSize, pageBuffer, dev->pageSize);
+
+								for (int i = 0; i < dev->pageSize; i++) {
+									if (pageBuffer[i] != 0xff) {
+										needErase = true;
+										break;
+									}
+								}
+
+								if (needErase) {
+									break;
+								}
+							}
+						}
+
+						PRINTF(("Erasing block %u: ", block));
+
+						if (! needErase) {
+							PRINTFLN(("SKIPPED (already erased)"));
+
+						} else {
+							_flashCmdWriteEnable();
+							_flashCmdEraseBlock(blockAddress);
+							_flashWriteWait(&status, 100);
+
+							PRINTFLN(("DONE"));
+						}
 					}
 				}
 
 				if (params.eraseBlock) {
+					uint32_t blockAddress = params.idx * dev->blockSize;
+					bool     needErase    = ! params.omitRedundantOps;
+
 					if (params.idx >= dev->blockCount) {
 						throw_Exception("Block index is out of bounds! (" + std::to_string(params.idx) + " >= " + std::to_string(dev->blockCount) + ")");
 					}
 
-					_flashCmdWriteEnable();
-					_flashCmdEraseBlock(params.idx * dev->blockSize);
-					_flashWriteWait(&status, 100);
+					if (! needErase) {
+						uint8_t pageBuffer[dev->pageSize];
+
+						for (int page = 0; page < dev->blockSize / dev->pageSize; page++) {
+							_flashRead(blockAddress + page * dev->pageSize, pageBuffer, dev->pageSize);
+
+							for (int i = 0; i < dev->pageSize; i++) {
+								if (pageBuffer[i] != 0xff) {
+									needErase = true;
+									break;
+								}
+							}
+
+							if (needErase) {
+								break;
+							}
+						}
+					}
+
+					PRINTF(("Erasing block %u: ", params.idx));
+
+					if (! needErase) {
+						PRINTFLN(("SKIPPED (already erased)"));
+					} else {
+
+						_flashCmdWriteEnable();
+						_flashCmdEraseBlock(blockAddress);
+						_flashWriteWait(&status, 100);
+
+						PRINTFLN(("DONE"));
+					}
 				}
 
 				if (params.eraseSector) {
@@ -689,10 +761,7 @@ int main(int argc, char *argv[]) {
 					uint32_t address = 0;
 
 					if (! params.inFd) {
-						PRINTF(("Writing requested but input file was not defined!"));
-
-						ret = 1;
-						break;
+						throw_Exception("Writing requested but input file was not defined!");
 					}
 
 					do {
@@ -713,6 +782,10 @@ int main(int argc, char *argv[]) {
 							address += toWriteSize;
 						}
 					} while (toWriteSize > 0);
+				}
+
+				if (params.writeBlock) {
+
 				}
 
 				if (params.read || params.readBlock || params.readSector) {

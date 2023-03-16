@@ -27,7 +27,8 @@ extern "C" {
 	#define DBG(x) do { } while (0)
 #endif
 
-#define PRINTF(x) { _printErr x; _printErr("\n"); }
+#define PRINTF(x) { _printErr x  }
+#define PRINTFLN(x) { PRINTF(x); PRINTF(("\n")); }
 
 void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength, uint32_t offset);
 
