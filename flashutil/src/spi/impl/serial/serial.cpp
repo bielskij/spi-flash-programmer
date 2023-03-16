@@ -56,7 +56,7 @@ struct Serial::Impl {
 Serial::Serial(const std::string &serialPath, int baud) {
 	this->self.reset(new Impl(serialPath));
 
-	PRINTF(("Device %s opened!", serialPath.c_str()));
+	PRINTFLN(("Device %s opened!", serialPath.c_str()));
 
 	{
 		boost::asio::serial_port &s = self->serial;
@@ -89,9 +89,10 @@ Serial::Serial(const std::string &serialPath, int baud) {
 		if (tcsetattr(fd, TCSANOW, &options) != 0) {
 			throw_Exception("Unable to set serial port options!");
 		}
+
+		tcflush(fd, TCIOFLUSH);
 	}
 #endif
-
 }
 
 
