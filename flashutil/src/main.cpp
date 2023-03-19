@@ -477,6 +477,47 @@ ERR(("%d", noRedundantCycles));
 }
 
 
+static void _doReadToStream(uint32_t address, uint32_t size, const SpiFlashDevice &dev, std::ostream &stream) {
+	if (address + size >= dev.blockCount * dev.blockSize) {
+		throw_Exception("Area to read is located out of device bounds!");
+	}
+
+	std::unique_ptr<uint8_t[]> flashImage;
+
+	flashImage.reset(new uint8_t[size]);
+
+	_flashRead(address, flashImage.get(), size);
+
+	stream.write(reinterpret_cast<char *>(flashImage.get()), size);
+}
+
+
+static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevice &dev, std::istream &stream) {
+	size_t written = 0;
+
+	if (address + size >= dev.blockCount * dev.blockSize) {
+		throw_Exception("Area to write is located out of device bounds!");
+	}
+
+	while (size != written) {
+		char pageBuffer[dev.pageSize];
+		size_t toRead = std::min(size - written, dev.pageSize);
+		size_t read = 0;
+
+		memset(pageBuffer, 0xff, dev.pageSize);
+
+		stream.read(pageBuffer, toRead);
+		read = stream.gcount();
+
+		_flashCmdWriteEnable();
+		_flashCmdPageWrite(address, (uint8_t *) pageBuffer, read);
+		_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
+
+		written += read;
+	}
+}
+
+
 int main(int argc, char *argv[]) {
 	int ret = 0;
 
@@ -756,36 +797,13 @@ int main(int argc, char *argv[]) {
 				}
 
 				if (params.write) {
-					std::array<uint8_t, PAGE_SIZE> pageBuffer;
-					size_t  toWriteSize;
-					uint32_t address = 0;
+					_doWriteFromStream(0, dev->blockCount * dev->blockSize, *dev, *params.inFd);
 
-					if (! params.inFd) {
-						throw_Exception("Writing requested but input file was not defined!");
-					}
+				} else if (params.writeBlock) {
+					_doWriteFromStream(params.idx * dev->blockSize, dev->blockSize, *dev, *params.inFd);
 
-					do {
-						params.inFd->read(reinterpret_cast<char *>(pageBuffer.data()), pageBuffer.size());
-
-						if (*params.inFd) {
-							toWriteSize = pageBuffer.size();
-
-						} else {
-							toWriteSize = params.inFd->gcount();
-						}
-
-						if (toWriteSize > 0) {
-							_flashCmdWriteEnable();
-							_flashCmdPageWrite(address, pageBuffer.data(), toWriteSize);
-							_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
-
-							address += toWriteSize;
-						}
-					} while (toWriteSize > 0);
-				}
-
-				if (params.writeBlock) {
-
+				} else if (params.writeSector) {
+					_doWriteFromStream(0, dev->blockCount * dev->blockSize, *dev, *params.inFd);
 				}
 
 				if (params.read || params.readBlock || params.readSector) {
@@ -798,55 +816,19 @@ int main(int argc, char *argv[]) {
 				}
 
 				if (params.read) {
-					size_t flashImageSize = dev->blockSize * dev->blockCount;
-
-					std::unique_ptr<uint8_t[]> flashImage;
-
-					if (flashImageSize == 0) {
-						PRINTFLN(("Flash size is unknown!"));
-						break;
-					}
-
 					PRINTFLN(("Reading whole flash"));
 
-					flashImage.reset(new uint8_t[flashImageSize]);
-
-					_flashRead(0, flashImage.get(), flashImageSize);
-
-					params.outFd->write(reinterpret_cast<char *>(flashImage.get()), flashImageSize);
+					_doReadToStream(0, dev->blockCount * dev->blockSize, *dev, *params.outFd);
 
 				} else if (params.readBlock) {
-					uint8_t buffer[dev->blockSize];
-
-					if (params.idx >= dev->blockCount) {
-						PRINTFLN(("Block index is out of bound! (%d >= %zd)", params.idx, dev->blockCount));
-
-						ret = 1;
-						break;
-					}
-
 					PRINTFLN(("Reading block %u (%#lx)", params.idx, params.idx * dev->blockSize));
 
-					_flashRead(params.idx * dev->blockSize, buffer, dev->blockSize);
-
-					params.outFd->write(reinterpret_cast<char *>(buffer), dev->blockSize);
+					_doReadToStream(params.idx * dev->blockSize, dev->blockSize, *dev, *params.outFd);
 
 				} else if (params.readSector) {
-					uint8_t buffer[dev->sectorSize];
-					size_t  bufferWritten;
-
-					if (params.idx >= dev->sectorCount) {
-						PRINTFLN(("Sector index is out of bound! (%d >= %zd)", params.idx, dev->sectorCount));
-
-						ret = 1;
-						break;
-					}
-
 					PRINTFLN(("Reading sector %u (%#lx)", params.idx, params.idx * dev->sectorSize));
 
-					_flashRead(params.idx * dev->sectorSize, buffer, dev->sectorSize);
-
-					params.outFd->write(reinterpret_cast<char *>(buffer), dev->sectorSize);
+					_doReadToStream(params.idx * dev->sectorSize, dev->sectorSize, *dev, *params.outFd);
 				}
 
 				if (params.verify) {
