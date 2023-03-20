@@ -27,11 +27,10 @@ struct Serial::Impl {
 	boost::asio::serial_port serial;
 
 	boost::asio::deadline_timer timeoutTimer;
-	boost::asio::streambuf      readBuffer;
 	Result                      readResult;
 
 	void onCompleted(const boost::system::error_code &errorCode, const size_t bytesTransferred) {
-		DBG(("CALL, read: %zd bytes", bytesTransferred));
+		DBG(("CALL, read: %zd bytes (%s)", bytesTransferred, errorCode.message().c_str()));
 
 		if (errorCode) {
 			this->readResult = Result::ERROR;
@@ -111,14 +110,7 @@ void Serial::write(void *buffer, std::size_t bufferSize, int timeoutMs) {
 uint8_t Serial::readByte(int timeoutMs) {
 	uint8_t ret;
 
-	if(self->readBuffer.size() > 0) {
-		std::istream is(&self->readBuffer);
-
-		is.read((char *) &ret, 1);
-
-	} else {
-		self->readResult = Result::IN_PROGRESS;
-
+	{
 		boost::asio::async_read(
 			self->serial,
 			boost::asio::buffer(&ret, 1),
@@ -145,6 +137,8 @@ uint8_t Serial::readByte(int timeoutMs) {
 			)
 		);
 
+		self->readResult = Result::IN_PROGRESS;
+
 		do {
 			self->service.run_one();
 
@@ -165,13 +159,9 @@ uint8_t Serial::readByte(int timeoutMs) {
 
 				case Result::SUCCESS:
 					{
-						std::istream is(&self->readBuffer);
-
 						DBG(("RESULT_SUCCESS"));
 
 						self->timeoutTimer.cancel();
-
-						is.ignore(1);
 					}
 					break;
 

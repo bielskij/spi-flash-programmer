@@ -54,6 +54,10 @@ void SerialSpi::transfer(Messages &msgs) {
 
 		memcpy(txBuffer, msg.send().data(), txSize);
 
+		if (rxSize) {
+			memset(rxBuffer, 0, rxSize);
+		}
+
 		if (msg.isAutoChipSelect()) {
 			this->spiCs(false);
 		}
@@ -150,10 +154,8 @@ void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 				crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
 
-				if (i < responseSize) {
-					if (response != NULL) {
-						response[i] = tmp;
-					}
+				if (response && i < responseSize) {
+					response[i] = tmp;
 				}
 			}
 		}

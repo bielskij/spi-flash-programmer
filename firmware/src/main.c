@@ -257,7 +257,7 @@ int main(int argc, char *argv[]) {
 						} else {
 							pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, pendingCmdCrc);
 
-							if (byte == 0) {
+							if (pendingDataSize == 0) {
 								rxState = RX_STATE_WAIT_CRC;
 
 							} else {

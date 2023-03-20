@@ -418,13 +418,14 @@ static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 
 				msg
 					.reset()
-					.autoChipSelect(false)
-					.recv()
-						.bytes(PAGE_SIZE);
+					.autoChipSelect(false);
 
 				while (bufferSize > 0) {
 					uint16_t toRead = bufferSize >= PAGE_SIZE ? PAGE_SIZE : PAGE_SIZE - bufferSize;
-					uint16_t rest   = bufferSize - toRead;
+
+					msg
+						.recv()
+							.bytes(toRead);
 
 					spiDev->transfer(msgs);
 
@@ -442,7 +443,7 @@ static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 static void _doBlockErase(int blockIdx, const SpiFlashDevice &dev, bool noRedundantCycles) {
 	uint32_t blockAddress = blockIdx * dev.blockSize;
 	bool needErase = ! noRedundantCycles;
-ERR(("%d", noRedundantCycles));
+
 	if (! needErase) {
 		uint8_t pageBuffer[dev.pageSize];
 
@@ -478,7 +479,7 @@ ERR(("%d", noRedundantCycles));
 
 
 static void _doReadToStream(uint32_t address, uint32_t size, const SpiFlashDevice &dev, std::ostream &stream) {
-	if (address + size >= dev.blockCount * dev.blockSize) {
+	if (address + size > dev.blockCount * dev.blockSize) {
 		throw_Exception("Area to read is located out of device bounds!");
 	}
 
@@ -492,11 +493,15 @@ static void _doReadToStream(uint32_t address, uint32_t size, const SpiFlashDevic
 }
 
 
-static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevice &dev, std::istream &stream) {
+static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevice &dev, std::istream &stream, bool noRedundantCycles) {
 	size_t written = 0;
 
 	if (address + size >= dev.blockCount * dev.blockSize) {
 		throw_Exception("Area to write is located out of device bounds!");
+	}
+
+	if ((address % dev.pageSize) != 0) {
+		throw_Exception("Address is not page aligned!");
 	}
 
 	while (size != written) {
@@ -509,11 +514,36 @@ static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevi
 		stream.read(pageBuffer, toRead);
 		read = stream.gcount();
 
-		_flashCmdWriteEnable();
-		_flashCmdPageWrite(address, (uint8_t *) pageBuffer, read);
-		_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
+		if (read) {
+			bool needWrite = ! noRedundantCycles;
 
-		written += read;
+			if (! needWrite) {
+				uint8_t flashBuffer[dev.pageSize];
+
+				_flashRead(address, flashBuffer, toRead);
+
+				if (memcmp(flashBuffer, pageBuffer, toRead) == 0) {
+					needWrite = false;
+				}
+			}
+
+			uint32_t pageIdx = address / dev.pageSize;
+
+			PRINTF(("Writing page %u (%08x)", pageIdx, pageIdx));
+
+			if (! needWrite) {
+				PRINTFLN(("SKIPPED (the same)"));
+
+			} else {
+				_flashCmdWriteEnable();
+				_flashCmdPageWrite(address, (uint8_t *) pageBuffer, read);
+				_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
+
+				PRINTFLN(("DONE"));
+			}
+
+			written += read;
+		}
 	}
 }
 
@@ -758,18 +788,22 @@ int main(int argc, char *argv[]) {
 						PRINTFLN(("Chip is already unprotected!"));
 
 					} else {
+						uint8_t origRaw = status.raw;
+
 						PRINTFLN(("Unprotecting flash"));
 
 						status.raw &= ~dev->protectMask;
 
-						_flashCmdWriteEnable();
-						_flashCmdWriteStatusRegister(&status);
-						_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
+						if (status.raw != origRaw) {
+							_flashCmdWriteEnable();
+							_flashCmdWriteStatusRegister(&status);
+							_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
 
-						if ((status.raw & dev->protectMask) != 0) {
-							PRINTFLN(("Cannot unprotect the device!"));
+							if ((status.raw & dev->protectMask) != 0) {
+								PRINTFLN(("Cannot unprotect the device!"));
 
-							break;
+								break;
+							}
 						}
 
 						PRINTFLN(("Flash unprotected"));
@@ -797,13 +831,13 @@ int main(int argc, char *argv[]) {
 				}
 
 				if (params.write) {
-					_doWriteFromStream(0, dev->blockCount * dev->blockSize, *dev, *params.inFd);
+					_doWriteFromStream(0, dev->blockCount * dev->blockSize, *dev, *params.inFd, params.omitRedundantOps);
 
 				} else if (params.writeBlock) {
-					_doWriteFromStream(params.idx * dev->blockSize, dev->blockSize, *dev, *params.inFd);
+					_doWriteFromStream(params.idx * dev->blockSize, dev->blockSize, *dev, *params.inFd, params.omitRedundantOps);
 
 				} else if (params.writeSector) {
-					_doWriteFromStream(0, dev->blockCount * dev->blockSize, *dev, *params.inFd);
+					_doWriteFromStream(0, dev->blockCount * dev->blockSize, *dev, *params.inFd, params.omitRedundantOps);
 				}
 
 				if (params.read || params.readBlock || params.readSector) {

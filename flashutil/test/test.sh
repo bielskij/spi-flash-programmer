@@ -2,7 +2,7 @@
 
 set -e
 
-SERIAL_PORT=/dev/ttyUSB0
+SERIAL_PORT=/dev/ttyUSB1
 SERIAL_BAUD=1000000
 
 FLASH_UTIL="${FLASH_UTIL:-../build/flash-util}"
@@ -51,19 +51,24 @@ FLASH_SIZE=$(echo "${UTIL_OUT}" | sed -n "s/^.*size: \([0-9]\+\)B.*$/\1/p")
 FLASH_BLOCKS=$(echo "${UTIL_OUT}" | sed -n "s/^.*blocks: \([0-9]\+\) .*$/\1/p")
 FLASH_SECTORS=$(echo "${UTIL_OUT}" | sed -n "s/^.*sectors: \([0-9]\+\) .*$/\1/p")
 FLASH_PAGES=$(( ${FLASH_SIZE} / ${FLASH_PAGE_SIZE} ))
-FLASH_SECTORS_PER_BLOCK=$(( ${FLASH_SECTORS} / ${FLASH_BLOCKS} ))
 FLASH_BLOCK_SIZE=$(( ${FLASH_SIZE} / ${FLASH_BLOCKS} ))
 FLASH_SECTOR_SIZE=$(( ${FLASH_SIZE} / ${FLASH_SECTORS} ))
 
+FLASH_SECTORS_PER_BLOCK=$(( ${FLASH_SECTORS} / ${FLASH_BLOCKS} ))
+FLASH_PAGES_PER_SECTOR=$(( ${FLASH_SECTOR_SIZE} / ${FLASH_PAGE_SIZE} ))
+
 
 echo "##"
-echo "## FLASH_SIZE:    ${FLASH_SIZE} Bytes"
-echo "## FLASH_BLOCKS:  ${FLASH_BLOCKS}"
-echo "## FLASH_SECTORS: ${FLASH_SECTORS}"
-echo "## FLASH_PAGES:   ${FLASH_PAGES}"
-echo "## BLOCK_SIZE:    ${FLASH_BLOCK_SIZE}"
-echo "## SECTOR_SIZE:   ${FLASH_SECTOR_SIZE}"
-echo "## PAGE_SIZE:     ${FLASH_PAGE_SIZE}"
+echo "## FLASH_SIZE:       ${FLASH_SIZE} Bytes"
+echo "## FLASH_BLOCKS:     ${FLASH_BLOCKS}"
+echo "## FLASH_SECTORS:    ${FLASH_SECTORS}"
+echo "## FLASH_PAGES:      ${FLASH_PAGES}"
+echo "## BLOCK_SIZE:       ${FLASH_BLOCK_SIZE}"
+echo "## SECTOR_SIZE:      ${FLASH_SECTOR_SIZE}"
+echo "## PAGE_SIZE:        ${FLASH_PAGE_SIZE}"
+echo "##"
+echo "## SECTORS_PER_BLOCK ${FLASH_SECTORS_PER_BLOCK}"
+echo "## PAGES_PER_SECTOR  ${FLASH_PAGES_PER_SECTOR}"
 echo "##"
 
 trap cleanup EXIT
@@ -81,23 +86,25 @@ cp ${BLOCK_ERASED_PATH} ${BLOCK_TEST_PATH}
 head -c ${FLASH_PAGE_SIZE}  /dev/zero | tr "\000" "\377" > ${PAGE_ERASED_PATH}
 head -c ${FLASH_PAGE_SIZE}  /dev/urandom > ${PAGE_TEST_PATH}
 
-log "Checking if test block is erased"
-
-${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
-
-if diff ${TMP_PATH} ${BLOCK_ERASED_PATH}; then
-	log "Test block is already erased"
-else
-	log "Erasing test block"
-	
-	${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --erase-block ${TEST_BLOCK_IDX}
-fi
+log "Erasing test block"
+${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --erase-block ${TEST_BLOCK_IDX} --no-redudant-cycles
 
 log "Writing test page"
-
 cat ${PAGE_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${TEST_PAGE_0_OFFSET} * ${FLASH_PAGE_SIZE} ))
+cat ${PAGE_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${TEST_PAGE_1_OFFSET} * ${FLASH_PAGE_SIZE} ))
+
+${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --write-block ${TEST_BLOCK_IDX} -i ${BLOCK_TEST_PATH}
+
+log "Verifying test block"
+${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
+diff ${TMP_PATH} ${BLOCK_TEST_PATH}
 
 hexdump -C ${BLOCK_TEST_PATH}
+
+log "Testing erase sector"
+${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --erase-sector $(( ${TEST_BLOCK_IDX} * ${SECTORS_PER_BLOCK} )) --no-redudant-cycles
+${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
+
 
 #${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} 
 
