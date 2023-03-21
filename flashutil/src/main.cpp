@@ -267,8 +267,6 @@ static void _flashWriteWait(int timeoutMs) {
 static void _flashCmdPageWrite(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 	Spi::Messages msgs;
 
-	PRINTFLN(("Writing page at address: %08x", address));
-
 	{
 		auto &msg = msgs.add();
 
@@ -504,8 +502,9 @@ static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevi
 		throw_Exception("Address is not page aligned!");
 	}
 
-	while (size != written) {
+	while (size != written && ! stream.eof()) {
 		char pageBuffer[dev.pageSize];
+
 		size_t toRead = std::min(size - written, dev.pageSize);
 		size_t read = 0;
 
@@ -522,27 +521,30 @@ static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevi
 
 				_flashRead(address, flashBuffer, toRead);
 
-				if (memcmp(flashBuffer, pageBuffer, toRead) == 0) {
-					needWrite = false;
+				if (memcmp(flashBuffer, pageBuffer, read) != 0) {
+					needWrite = true;
 				}
 			}
 
 			uint32_t pageIdx = address / dev.pageSize;
 
-			PRINTF(("Writing page %u (%08x)", pageIdx, pageIdx));
+			PRINTF(("Writing page %u, in sector: %zd, in block %zd, address %08x ",
+				pageIdx, (pageIdx * dev.pageSize) / dev.sectorSize, (pageIdx * dev.pageSize) / dev.blockSize, address
+			));
 
 			if (! needWrite) {
 				PRINTFLN(("SKIPPED (the same)"));
 
 			} else {
 				_flashCmdWriteEnable();
-				_flashCmdPageWrite(address, (uint8_t *) pageBuffer, read);
+				_flashCmdPageWrite(address, (uint8_t *) pageBuffer, dev.pageSize);
 				_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
 
 				PRINTFLN(("DONE"));
 			}
 
-			written += read;
+			address += dev.pageSize;
+			written += dev.pageSize;
 		}
 	}
 }
@@ -571,8 +573,8 @@ int main(int argc, char *argv[]) {
 				(OPT_ERASE_BLOCK,      po::value<off_t>(),       "Erase block at index")
 				(OPT_ERASE_SECTOR,     po::value<off_t>(),       "Erase sector at index")
 				(OPT_WRITE       ",w",                           "Write input file")
-				(OPT_WRITE_BLOCK,                                "Write block from input file")
-				(OPT_WRITE_SECTOR,                               "Write sector from input file")
+				(OPT_WRITE_BLOCK,      po::value<off_t>(),       "Write block from input file")
+				(OPT_WRITE_SECTOR,     po::value<off_t>(),       "Write sector from input file")
 				(OPT_VERIFY      ",V",                           "Verify writing process")
 				(OPT_UNPROTECT   ",u",                           "Unprotect the chip before doing any operation on it")
 				(OPT_FLASH_DESC  ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")

@@ -2,7 +2,7 @@
 
 set -e
 
-SERIAL_PORT=/dev/ttyUSB1
+SERIAL_PORT=/dev/ttyUSB0
 SERIAL_BAUD=1000000
 
 FLASH_UTIL="${FLASH_UTIL:-../build/flash-util}"
@@ -44,7 +44,15 @@ function cleanup() {
 
 FLASH_UTIL_READER_PARAM="-s ${SERIAL_PORT} --serial-baud ${SERIAL_BAUD}"
 
-UTIL_OUT=$(${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM}  2>&1)
+function callFlashUtil() {
+	local cmd="${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} $@"
+
+	echo "calling \"$cmd\"" 1>&2
+	
+	eval "$cmd 2>&1"
+}
+
+UTIL_OUT=$(callFlashUtil)
 
 FLASH_PAGE_SIZE=256
 FLASH_SIZE=$(echo "${UTIL_OUT}" | sed -n "s/^.*size: \([0-9]\+\)B.*$/\1/p")
@@ -87,25 +95,24 @@ head -c ${FLASH_PAGE_SIZE}  /dev/zero | tr "\000" "\377" > ${PAGE_ERASED_PATH}
 head -c ${FLASH_PAGE_SIZE}  /dev/urandom > ${PAGE_TEST_PATH}
 
 log "Erasing test block"
-${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --erase-block ${TEST_BLOCK_IDX} --no-redudant-cycles
+callFlashUtil --erase-block ${TEST_BLOCK_IDX} --no-redudant-cycles
 
 log "Writing test page"
 cat ${PAGE_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${TEST_PAGE_0_OFFSET} * ${FLASH_PAGE_SIZE} ))
 cat ${PAGE_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${TEST_PAGE_1_OFFSET} * ${FLASH_PAGE_SIZE} ))
 
-${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --write-block ${TEST_BLOCK_IDX} -i ${BLOCK_TEST_PATH}
+callFlashUtil --write-block ${TEST_BLOCK_IDX} -i ${BLOCK_TEST_PATH}
 
 log "Verifying test block"
-${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
+callFlashUtil --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
 diff ${TMP_PATH} ${BLOCK_TEST_PATH}
 
 hexdump -C ${BLOCK_TEST_PATH}
+hexdump -C ${TMP_PATH}
 
 log "Testing erase sector"
-${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --erase-sector $(( ${TEST_BLOCK_IDX} * ${SECTORS_PER_BLOCK} )) --no-redudant-cycles
-${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
+callFlashUtil --erase-sector $(( ${TEST_BLOCK_IDX} * ${FLASH_SECTORS_PER_BLOCK} )) --no-redudant-cycles
+callFlashUtil --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
 
-
-#${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} 
 
 log "SUCCESS"
