@@ -53,9 +53,7 @@ Spi::Message::RecvOpts &Spi::Message::RecvOpts::skip(std::size_t count) {
 
 
 Spi::Message::RecvOpts &Spi::Message::RecvOpts::bytes(std::size_t count) {
-	this->_data.clear();
-
-	this->_data.reserve(count);
+	this->_data.reserve(this->_data.size() + count);
 
 	while (count--) {
 		this->_data.push_back(0xff);

@@ -112,6 +112,7 @@ void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 	// Receive
 	{
 		uint8_t crc = PROTO_CRC8_START;
+		uint8_t code;
 		uint8_t tmp;
 
 		// sync
@@ -127,13 +128,9 @@ void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 		// code
 		{
-			tmp = self->serial->readByte(TIMEOUT_MS);
+			code = self->serial->readByte(TIMEOUT_MS);
 
-			if (tmp != PROTO_NO_ERROR) {
-				throw_Exception("Received error! " + std::to_string(tmp));
-			}
-
-			crc = crc8_getForByte(tmp, PROTO_CRC8_POLY, crc);
+			crc = crc8_getForByte(code, PROTO_CRC8_POLY, crc);
 		}
 
 		// length
@@ -167,6 +164,10 @@ void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 			if (tmp != crc) {
 				throw_Exception("CRC mismatch!");
 			}
+		}
+
+		if (code != PROTO_NO_ERROR) {
+			throw_Exception("Received error! " + std::to_string(code));
 		}
 	}
 
