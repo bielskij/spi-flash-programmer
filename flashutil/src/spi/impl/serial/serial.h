@@ -18,7 +18,7 @@ class Serial {
 
 	public:
 		void write(void *buffer, std::size_t bufferSize, int timeoutMs);
-		uint8_t readByte(int timeoutMs);
+		void read(void *buffer, std::size_t bufferSize, int timeoutMs);
 
 	private:
 		class Impl;

@@ -388,7 +388,7 @@ class ChipSelector {
 };
 
 
-static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize) {
+static void _flashRead(uint32_t address, const SpiFlashDevice &dev, uint8_t *buffer, size_t bufferSize) {
 	Spi::Messages msgs;
 
 	DBG(("Reading %lu bytes from address: %08x", bufferSize, address));
@@ -410,7 +410,7 @@ static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 			ChipSelector selector(*spiDev.get());
 
 			{
-				uint32_t bufferWritten = 0;
+				size_t bufferWritten = 0;
 
 				spiDev->transfer(msgs);
 
@@ -419,7 +419,7 @@ static void _flashRead(uint32_t address, uint8_t *buffer, size_t bufferSize) {
 					.autoChipSelect(false);
 
 				while (bufferSize > 0) {
-					uint16_t toRead = bufferSize >= PAGE_SIZE ? PAGE_SIZE : PAGE_SIZE - bufferSize;
+					size_t toRead = bufferSize >= dev.pageSize ? dev.pageSize : bufferSize;
 
 					msg
 						.recv()
@@ -447,7 +447,7 @@ static void _doBlockErase(int blockIdx, const SpiFlashDevice &dev, bool noRedund
 		uint8_t pageBuffer[dev.pageSize];
 
 		for (int page = 0; page < dev.blockSize / dev.pageSize; page++) {
-			_flashRead(blockAddress + page * dev.pageSize, pageBuffer, dev.pageSize);
+			_flashRead(blockAddress + page * dev.pageSize, dev, pageBuffer, dev.pageSize);
 
 			for (int i = 0; i < dev.pageSize; i++) {
 				if (pageBuffer[i] != 0xff) {
@@ -486,7 +486,7 @@ static void _doReadToStream(uint32_t address, uint32_t size, const SpiFlashDevic
 
 	flashImage.reset(new uint8_t[size]);
 
-	_flashRead(address, flashImage.get(), size);
+	_flashRead(address, dev, flashImage.get(), size);
 
 	stream.write(reinterpret_cast<char *>(flashImage.get()), size);
 }
@@ -520,7 +520,7 @@ static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevi
 			if (! needWrite) {
 				uint8_t flashBuffer[dev.pageSize];
 
-				_flashRead(address, flashBuffer, toRead);
+				_flashRead(address, dev, flashBuffer, toRead);
 
 				if (memcmp(flashBuffer, pageBuffer, read) != 0) {
 					needWrite = true;
@@ -902,7 +902,7 @@ int main(int argc, char *argv[]) {
 
 						PRINTFLN(("Verifying block %d", blockNo));
 
-						_flashRead(blockNo * dev->blockSize, buffer, compareSize);
+						_flashRead(blockNo * dev->blockSize, *dev, buffer, compareSize);
 
 						if (memcmp(buffer, referenceBuffer, bufferWritten) == 0) {
 							PRINTFLN(("Verification of block %d -> SUCCESS", blockNo));

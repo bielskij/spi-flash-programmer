@@ -36,7 +36,6 @@ struct Serial::Impl {
 			if (errorCode != boost::asio::error::operation_aborted) {
 				this->timeoutTimer.cancel();
 
-			} else {
 				this->readResult = Result::ERROR;
 			}
 
@@ -116,75 +115,68 @@ void Serial::write(void *buffer, std::size_t bufferSize, int timeoutMs) {
 }
 
 
-uint8_t Serial::readByte(int timeoutMs) {
-	uint8_t ret;
+void Serial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
+	self->service.restart();
 
-	{
-		if (timeoutMs != 0) {
-			self->timeoutTimer.expires_from_now(boost::posix_time::milliseconds(timeoutMs));
+	if (timeoutMs != 0) {
+		self->timeoutTimer.expires_from_now(boost::posix_time::milliseconds(timeoutMs));
 
-		} else {
-			self->timeoutTimer.expires_from_now(boost::posix_time::hours(100000));
-		}
-
-		self->timeoutTimer.async_wait(
-			boost::bind(
-				&Impl::onTimedOut,
-				self.get(),
-				boost::asio::placeholders::error
-			)
-		);
-
-		self->readResult = Result::IN_PROGRESS;
-
-		boost::asio::async_read(
-			self->serial,
-			boost::asio::buffer(&ret, 1),
-			boost::bind(
-				&Impl::onCompleted,
-				self.get(),
-				boost::asio::placeholders::error,
-				boost::asio::placeholders::bytes_transferred
-			)
-		);
-
-		self->service.restart();
-		self->service.run();
-
-		switch (self->readResult) {
-			case Result::IN_PROGRESS:
-				break;
-
-			case Result::ERROR:
-				{
-					DBG(("RESULT_ERROR"));
-
-					self->timeoutTimer.cancel();
-					self->serial.cancel();
-
-					throw_Exception("Error occurred while reading data from serial port!");
-				}
-				break;
-
-			case Result::SUCCESS:
-				{
-					DBG(("RESULT_SUCCESS"));
-
-					self->timeoutTimer.cancel();
-				}
-				break;
-
-			case Result::TIMEOUT:
-				{
-					DBG(("RESULT_TIMEOUT"));
-
-					self->serial.cancel();
-
-					throw_Exception("Timeout occurred while waiting on data");
-				}
-				break;
-		}
+	} else {
+		self->timeoutTimer.expires_from_now(boost::posix_time::hours(100000));
 	}
 
-	return ret;
+	self->timeoutTimer.async_wait(
+		boost::bind(
+			&Impl::onTimedOut,
+			self.get(),
+			boost::asio::placeholders::error
+		)
+	);
+
+	self->readResult = Result::IN_PROGRESS;
+
+	boost::asio::async_read(
+		self->serial,
+		boost::asio::buffer(buffer, bufferSize),
+		boost::bind(
+			&Impl::onCompleted,
+			self.get(),
+			boost::asio::placeholders::error,
+			boost::asio::placeholders::bytes_transferred
+		)
+	);
+
+	self->service.run();
+
+	switch (self->readResult) {
+		case Result::IN_PROGRESS:
+			break;
+
+		case Result::ERROR:
+			{
+				self->timeoutTimer.cancel();
+				self->serial.cancel();
+
+				throw_Exception("Error occurred while reading data from serial port!");
+			}
+			break;
+
+		case Result::SUCCESS:
+			{
+				DBG(("RESULT_SUCCESS"));
+
+				self->timeoutTimer.cancel();
+			}
+			break;
+
+		case Result::TIMEOUT:
+			{
+				DBG(("RESULT_TIMEOUT"));
+
+				self->serial.cancel();
+
+				throw_Exception("Timeout occurred while waiting on data");
+			}
+			break;
+	}
 }

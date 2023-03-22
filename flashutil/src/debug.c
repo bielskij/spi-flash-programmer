@@ -17,7 +17,7 @@ void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength,
 
 		printf(" %02x", buffer[i]);
 
-		if (! isprint(buffer[i])) {
+		if (! isprint(buffer[i]) || buffer[i] == '\n' || buffer[i] == '\r') {
 			asciiBuffer[i % lineLength] = '.';
 		} else {
 			asciiBuffer[i % lineLength] = buffer[i];

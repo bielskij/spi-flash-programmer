@@ -120,7 +120,7 @@ log "Writing random contents to block"
 head -c ${FLASH_BLOCK_SIZE} /dev/zero | tr "\000" "\377" > ${BLOCK_TEST_PATH}
 
 log "Testing erase sector"
-callFlashUtil --erase-sector $(( ${TEST_BLOCK_IDX} * ${FLASH_SECTORS_PER_BLOCK} )) --no-redudant-cycles
+callFlashUtil --erase-sector $(( ${TEST_BLOCK_IDX} * ${FLASH_SECTORS_PER_BLOCK} ))
 callFlashUtil --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
 
 cat ${SECTOR_ERASED_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=0
@@ -133,7 +133,7 @@ log "Writing whole flash with random data"
 head -c ${FLASH_SIZE}  /dev/urandom > ${TMP_PATH}
 expectedChkSum=$(md5sum -b ${TMP_PATH} | cut -d ' ' -f1)
 
-callFlashUtil --write -i ${TMP_PATH} --no-redudant-cycles
+callFlashUtil --write -i ${TMP_PATH} -V
 rm -f ${TMP_PATH}
 callFlashUtil --read -o ${TMP_PATH}
 
