@@ -157,7 +157,7 @@ typedef enum _RxState {
 
 
 static void _response(uint8_t code, uint8_t *buffer, uint16_t bufferSize) {
-	uint8_t crc = 0;
+	uint8_t crc = PROTO_CRC8_START;
 
 	uart_send(PROTO_SYNC_BYTE);
 	crc = crc8_getForByte(PROTO_SYNC_BYTE, PROTO_CRC8_POLY, crc);
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
 						} else {
 							rxState = RX_STATE_WAIT_CMD;
 
-							pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, 0);
+							pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, PROTO_CRC8_START);
 						}
 					}
 					break;
