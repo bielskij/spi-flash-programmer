@@ -765,7 +765,7 @@ int main(int argc, char *argv[]) {
 					dev = &unknownDevice;
 				}
 
-				PRINTFLN(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdkB",
+				PRINTFLN(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdB",
 					dev->name.c_str(), dev->id[0], dev->id[1], dev->id[2],
 					dev->blockCount * dev->blockSize, dev->blockCount, dev->blockSize / 1024,
 					dev->sectorCount, dev->sectorSize

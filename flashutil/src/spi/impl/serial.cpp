@@ -87,77 +87,94 @@ void SerialSpi::transfer(Messages &msgs) {
 #define TRANSFER_DATA_BLOCK_SIZE ((size_t) 240)
 
 void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize) {
+	size_t triesLeft = 3;
+	bool   success   = false;
+
 	DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd", cmd, cmd, data, dataSize, response, responseSize));
 
-	// Send
-	{
-		uint16_t txDataSize = 4 + dataSize + 1;
-		uint8_t txData[txDataSize];
+	do {
+		triesLeft--;
 
-		txData[0] = PROTO_SYNC_BYTE;
-		txData[1] = cmd;
-		txData[2] = dataSize >> 8;
-		txData[3] = dataSize;
-
-		if (dataSize) {
-			memcpy(txData + 4, data, dataSize);
-		}
-
-		txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
-
-//		debug_dumpBuffer(txData, txDataSize, 32, 0);
-
-		self->serial->write(txData, txDataSize, TIMEOUT_MS);
-	}
-
-	// Receive
-	{
-		uint8_t rxHeader[4];
-
-		self->serial->read(rxHeader, sizeof(rxHeader), TIMEOUT_MS);
-
-		// Sync
-		if (rxHeader[0] != PROTO_SYNC_BYTE) {
-			throw_Exception("Received byte is not a sync byte!");
-		}
-
-		{
-			size_t  rxDataSize = ((rxHeader[2] << 8) | rxHeader[3]) + 1; // room for crc
-			uint8_t rxData[rxDataSize];
-
-			self->serial->read(rxData, rxDataSize, TIMEOUT_MS);
-
-			DBG(("rxDataSize: %zd", rxDataSize));
-
-			// Check CRC
+		try {
+			// Send
 			{
-				uint8_t crc = PROTO_CRC8_START;
+				uint16_t txDataSize = 4 + dataSize + 1;
+				uint8_t txData[txDataSize];
 
-				crc = crc8_get(rxHeader, sizeof(rxHeader), PROTO_CRC8_POLY, crc);
-				crc = crc8_get(rxData, rxDataSize - 1, PROTO_CRC8_POLY, crc);
+				txData[0] = PROTO_SYNC_BYTE;
+				txData[1] = cmd;
+				txData[2] = dataSize >> 8;
+				txData[3] = dataSize;
 
-				if (crc != rxData[rxDataSize - 1]) {
-					throw_Exception("CRC mismatch!");
+				if (dataSize) {
+					memcpy(txData + 4, data, dataSize);
+				}
+
+				txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
+
+		//		debug_dumpBuffer(txData, txDataSize, 32, 0);
+
+				self->serial->write(txData, txDataSize, TIMEOUT_MS);
+			}
+
+			// Receive
+			{
+				uint8_t rxHeader[4];
+
+				self->serial->read(rxHeader, sizeof(rxHeader), TIMEOUT_MS);
+
+				// Sync
+				if (rxHeader[0] != PROTO_SYNC_BYTE) {
+					throw_Exception("Received byte is not a sync byte!");
+				}
+
+				{
+					size_t  rxDataSize = ((rxHeader[2] << 8) | rxHeader[3]) + 1; // room for crc
+					uint8_t rxData[rxDataSize];
+
+					self->serial->read(rxData, rxDataSize, TIMEOUT_MS);
+
+					DBG(("rxDataSize: %zd", rxDataSize));
+
+					// Check CRC
+					{
+						uint8_t crc = PROTO_CRC8_START;
+
+						crc = crc8_get(rxHeader, sizeof(rxHeader), PROTO_CRC8_POLY, crc);
+						crc = crc8_get(rxData, rxDataSize - 1, PROTO_CRC8_POLY, crc);
+
+						if (crc != rxData[rxDataSize - 1]) {
+							throw_Exception("CRC mismatch!");
+						}
+					}
+
+					if (response) {
+						size_t toCopy = std::min(responseSize, rxDataSize - 1);
+
+						if (toCopy) {
+							memcpy(response, rxData, toCopy);
+						}
+					}
+				}
+
+				{
+					uint8_t code = rxHeader[1];
+
+					if (code != PROTO_NO_ERROR) {
+						throw_Exception("Received error! " + std::to_string(code));
+					}
 				}
 			}
 
-			if (response) {
-				size_t toCopy = std::min(responseSize, rxDataSize - 1);
+			success = true;
+		} catch (const Exception &ex) {
+			PRINTFLN(("Got exception! %s - %zd tries left", ex.what(), triesLeft));
 
-				if (toCopy) {
-					memcpy(response, rxData, toCopy);
-				}
+			if (triesLeft == 0) {
+				throw;
 			}
 		}
-
-		{
-			uint8_t code = rxHeader[1];
-
-			if (code != PROTO_NO_ERROR) {
-				throw_Exception("Received error! " + std::to_string(code));
-			}
-		}
-	}
+	} while (! success);
 
 //	debug_dumpBuffer(response, responseSize, 32, 0);
 }
