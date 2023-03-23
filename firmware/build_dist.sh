@@ -1,4 +1,4 @@
-#!/bin/env bash
+#!/usr/bin/env bash
 
 VERBOSE=0
 
@@ -12,12 +12,10 @@ function build() {
 	cp -f out/firmware.hex ${outDir}/firmware_$(( fcpu / 1000000 ))mhz_${baud}bps.hex
 }
 
-build 16000000 1000000 dist
 build 16000000  500000 dist
 build 16000000   38400 dist
 build 16000000   19200 dist
 
-build  8000000 1000000 dist
 build  8000000  500000 dist
 build  8000000   38400 dist
 build  8000000   19200 dist

@@ -9,7 +9,10 @@ find_package(Boost COMPONENTS program_options thread chrono REQUIRED)
 set(SRC_FILES 
 	../common/src/crc8.c 
 
-	src/serial.cpp
+	src/spi.cpp
+	src/spi/creator.cpp
+	src/spi/impl/serial.cpp
+	src/spi/impl/serial/serial.cpp
 	src/debug.c
 	src/main.cpp
 )
