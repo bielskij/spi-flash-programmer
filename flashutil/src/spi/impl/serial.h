@@ -21,6 +21,9 @@ class SerialSpi : public Spi {
 		void transfer(Messages &msgs) override;
 		void chipSelect(bool select) override;
 
+		Config getConfig() override;
+		void   setConfig(const Config &config) override;
+
 	private:
 		void cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize);
 		void spiCs(bool high);

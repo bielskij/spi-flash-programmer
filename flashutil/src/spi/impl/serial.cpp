@@ -17,6 +17,7 @@
 
 struct SerialSpi::Impl {
 	std::unique_ptr<Serial> serial;
+	Config                  config;
 
 	Impl(const std::string &path, int baudrate) {
 		this->serial.reset(new Serial(path, baudrate));
@@ -39,6 +40,16 @@ SerialSpi::~SerialSpi() {
 
 void SerialSpi::chipSelect(bool select) {
 	this->spiCs(! select);
+}
+
+
+Spi::Config SerialSpi::getConfig() {
+	return self->config;
+}
+
+
+void SerialSpi::setConfig(const Config &config) {
+	self->config = config;
 }
 
 
@@ -84,16 +95,18 @@ void SerialSpi::transfer(Messages &msgs) {
 	}
 }
 
-#define TRANSFER_DATA_BLOCK_SIZE ((size_t) 240)
+#define TRANSFER_DATA_BLOCK_SIZE ((size_t) 251)
 
 void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize) {
-	size_t triesLeft = 3;
+	size_t triesLeft = self->config.getRetransmissions();
 	bool   success   = false;
 
 	DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd", cmd, cmd, data, dataSize, response, responseSize));
 
 	do {
-		triesLeft--;
+		if (triesLeft) {
+			triesLeft--;
+		}
 
 		try {
 			// Send
@@ -168,7 +181,7 @@ void SerialSpi::cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t 
 
 			success = true;
 		} catch (const Exception &ex) {
-			PRINTFLN(("Got exception! %s - %zd tries left", ex.what(), triesLeft));
+//			PRINTFLN(("Got exception! %s - %zd tries left", ex.what(), triesLeft));
 
 			if (triesLeft == 0) {
 				throw;

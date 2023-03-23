@@ -22,7 +22,7 @@ DIR_INC := include
 DIR_SRC := src
 
 F_CPU ?= 16000000
-BAUD  ?=  1000000
+BAUD  ?=  500000
 UART  ?= /dev/ttyUSB0
 MCU   := atmega328p
 

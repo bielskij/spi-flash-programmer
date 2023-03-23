@@ -3,60 +3,71 @@
 set -e
 
 SERIAL_PORT=${SERIAL_PORT:-/dev/ttyUSB0}
-SERIAL_BAUD=1000000
+SERIAL_BAUD=${SERIAL_BAUD:-500000}
 
 FLASH_UTIL="${FLASH_UTIL:-../build/flash-util}"
 
 PAGE_SIZE=256
 
-TEST_BLOCK_IDX=2
-TEST_PAGE_0_OFFSET=1
-TEST_PAGE_1_OFFSET=3
+TEST_BLOCK_FIRST=0
+TEST_BLOCK_LAST=
+TEST_SECTOR_FIRST=0
+TEST_SECTOR_LAST=
+TEST_PAGE_FIRST=0
+TEST_PAGE_LAST=
 
+QUIET="> /dev/null 2>&1"
+
+if [ "${V}" = "1" ]; then
+	QUIET=
+fi
 
 function log() {
-	echo -e "## log: $@"
+	echo -e "##### log: $@"
 }
 
 function cleanup() {
 	echo "Cleaning up"
-	
-	if [ "x${BLOCK_ERASED_PATH}" != "x" ]; then
-		rm -f ${BLOCK_ERASED_PATH}
-	fi
-	
-	if [ "x${PAGE_ERASED_PATH}" != "x" ]; then
-		rm -f ${PAGE_ERASED_PATH}
-	fi
-	
-	if [ "x${TMP_PATH}" != "x" ]; then
-		rm -f ${TMP_PATH}
-	fi
 
-	if [ "x${PAGE_TEST_PATH}" != "x" ]; then
-		rm -f ${PAGE_TEST_PATH}
+return 0	
+	if [ "x${FLASH_TEST_PATH}" != "x" ]; then
+		rm -f ${FLASH_TEST_PATH}
 	fi
 	
 	if [ "x${BLOCK_TEST_PATH}" != "x" ]; then
 		rm -f ${BLOCK_TEST_PATH}
 	fi
 	
-	if [ "x${SECTOR_ERASED_PATH}" != "x" ]; then
-	rm -f ${SECTOR_ERASED_PATH}
+	if [ "x${SECTOR_TEST_PATH}" != "x" ]; then
+		rm -f ${SECTOR_TEST_PATH}
+	fi
+	
+	if [ "x${PAGE_TEST_PATH}" != "x" ]; then
+		rm -f ${PAGE_TEST_PATH}
+	fi
+	
+	if [ "x${TMP_PATH}" != "x" ]; then
+		rm -f ${TMP_PATH}
 	fi
 }
 
 FLASH_UTIL_READER_PARAM="-s ${SERIAL_PORT} --serial-baud ${SERIAL_BAUD}"
 
+function callCmd() {
+	local cmd="$@"
+	
+	log "calling \"$cmd\""
+	
+	eval "$cmd ${QUIET} 2>&1"
+}
+
 function callFlashUtil() {
 	local cmd="${FLASH_UTIL} ${FLASH_UTIL_READER_PARAM} $@"
 
-	echo "calling \"$cmd\"" 1>&2
-	
-	eval "$cmd 2>&1"
+	callCmd "$cmd"
 }
 
-UTIL_OUT=$(callFlashUtil)
+UTIL_OUT=$(QUIET= callFlashUtil)
 
 FLASH_PAGE_SIZE=256
 FLASH_SIZE=$(echo "${UTIL_OUT}" | sed -n "s/^.*size: \([0-9]\+\)B.*$/\1/p")
@@ -69,78 +80,131 @@ FLASH_SECTOR_SIZE=$(( ${FLASH_SIZE} / ${FLASH_SECTORS} ))
 FLASH_SECTORS_PER_BLOCK=$(( ${FLASH_SECTORS} / ${FLASH_BLOCKS} ))
 FLASH_PAGES_PER_SECTOR=$(( ${FLASH_SECTOR_SIZE} / ${FLASH_PAGE_SIZE} ))
 
+TEST_BLOCK_LAST=$(( ${FLASH_BLOCKS} - 1 ))
+TEST_SECTOR_LAST=$(( ${FLASH_SECTORS_PER_BLOCK} - 1 ))
+TEST_PAGE_LAST=$(( ${FLASH_PAGES_PER_SECTOR} - 1 ))
 
-echo "##"
-echo "## FLASH_SIZE:       ${FLASH_SIZE} Bytes"
-echo "## FLASH_BLOCKS:     ${FLASH_BLOCKS}"
-echo "## FLASH_SECTORS:    ${FLASH_SECTORS}"
-echo "## FLASH_PAGES:      ${FLASH_PAGES}"
-echo "## BLOCK_SIZE:       ${FLASH_BLOCK_SIZE}"
-echo "## SECTOR_SIZE:      ${FLASH_SECTOR_SIZE}"
-echo "## PAGE_SIZE:        ${FLASH_PAGE_SIZE}"
-echo "##"
-echo "## SECTORS_PER_BLOCK ${FLASH_SECTORS_PER_BLOCK}"
-echo "## PAGES_PER_SECTOR  ${FLASH_PAGES_PER_SECTOR}"
-echo "##"
+echo -e "\n##"
+echo -e "## FLASH_SIZE:       ${FLASH_SIZE} Bytes"
+echo -e "## FLASH_BLOCKS:     ${FLASH_BLOCKS}"
+echo -e "## FLASH_SECTORS:    ${FLASH_SECTORS}"
+echo -e "## FLASH_PAGES:      ${FLASH_PAGES}"
+echo -e "## BLOCK_SIZE:       ${FLASH_BLOCK_SIZE}"
+echo -e "## SECTOR_SIZE:      ${FLASH_SECTOR_SIZE}"
+echo -e "## PAGE_SIZE:        ${FLASH_PAGE_SIZE}"
+echo -e "##"
+echo -e "## SECTORS_PER_BLOCK ${FLASH_SECTORS_PER_BLOCK}"
+echo -e "## PAGES_PER_SECTOR  ${FLASH_PAGES_PER_SECTOR}"
+echo -e "##"
+echo -e "## TEST_BLOCKS:  ${TEST_BLOCK_FIRST}, ${TEST_BLOCK_LAST}"
+echo -e "## TEST_SECTORS: ${TEST_SECTOR_FIRST}, ${TEST_SECTOR_LAST}"
+echo -e "## TEST_PAGES:   ${TEST_PAGE_FIRST}, ${TEST_PAGE_LAST}"
+echo -e "##\n"
 
 trap cleanup EXIT
 
-BLOCK_ERASED_PATH=$(mktemp)
-PAGE_ERASED_PATH=$(mktemp)
-SECTOR_ERASED_PATH=$(mktemp)
-PAGE_TEST_PATH=$(mktemp)
+FLASH_TEST_PATH=$(mktemp)
 BLOCK_TEST_PATH=$(mktemp)
+SECTOR_TEST_PATH=$(mktemp)
+PAGE_TEST_PATH=$(mktemp)
 
 TMP_PATH=$(mktemp)
 
-head -c ${FLASH_BLOCK_SIZE}  /dev/zero | tr "\000" "\377" > ${BLOCK_ERASED_PATH}
-head -c ${FLASH_SECTOR_SIZE} /dev/zero | tr "\000" "\377" > ${SECTOR_ERASED_PATH}
-head -c ${FLASH_PAGE_SIZE}   /dev/zero | tr "\000" "\377" > ${PAGE_ERASED_PATH}
-cp ${BLOCK_ERASED_PATH} ${BLOCK_TEST_PATH}
+head -c ${FLASH_PAGE_SIZE}   /dev/urandom > ${PAGE_TEST_PATH}
+head -c ${FLASH_SECTOR_SIZE} /dev/urandom > ${SECTOR_TEST_PATH}
+head -c ${FLASH_BLOCK_SIZE}  /dev/urandom > ${BLOCK_TEST_PATH}
+head -c ${FLASH_SIZE}        /dev/urandom > ${FLASH_TEST_PATH}
 
-head -c ${FLASH_PAGE_SIZE}  /dev/urandom > ${PAGE_TEST_PATH}
+function test_erase_write_block() {
+	log "\n------------------------- TEST, BLOCK: erase, write, read"
+	
+	local blocks=( ${TEST_BLOCK_FIRST} ${TEST_BLOCK_LAST} )
+	
+	for block in ${blocks[@]}; do
+		log "Erasing, writing and verifying test block $block"
+		
+		rm -f ${TMP_PATH}
+	
+		callFlashUtil --erase-block ${block} --no-redudant-cycles
+		callFlashUtil --write-block ${block} -i ${BLOCK_TEST_PATH} -V
+		callFlashUtil --read-block  ${block} -o ${TMP_PATH}
+		
+		if ! diff ${BLOCK_TEST_PATH} ${TMP_PATH}; then
+			log "\nReference sector\n"
+			hexdump -C ${SECTOR_TEST_PATH}
+			log "\nRead sector\n" 
+			hexdump -C ${TMP_PATH}
+			return 1
+		fi
+	done
+}
 
-log "Erasing test block"
-callFlashUtil --erase-block ${TEST_BLOCK_IDX} --no-redudant-cycles
+function test_erase_write_sector() {
+	log "\n------------------------- TEST, SECTOR: erase, write, read"
+	
+	local block=${TEST_BLOCK_FIRST}
+	local sectors=(${TEST_SECTOR_FIRST} ${TEST_SECTOR_LAST})
 
-log "Writing test page"
-cat ${PAGE_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${TEST_PAGE_0_OFFSET} * ${FLASH_PAGE_SIZE} ))
-cat ${PAGE_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${TEST_PAGE_1_OFFSET} * ${FLASH_PAGE_SIZE} ))
+	callFlashUtil --erase-block ${block} --no-redudant-cycles
 
-callFlashUtil --write-block ${TEST_BLOCK_IDX} -i ${BLOCK_TEST_PATH}
+	for sector in ${sectors[@]}; do
+		local dstSector=$(( ${block} * ${FLASH_SECTORS_PER_BLOCK} + ${sector} ))
+		
+		log "Erasing, writing and verifying test sector $dstSector"
+		
+		rm -f ${TMP_PATH}
+	
+		callFlashUtil --erase-sector ${dstSector} --no-redudant-cycles
+		callFlashUtil --write-sector ${dstSector} -i ${SECTOR_TEST_PATH} -V
+		callFlashUtil --read-sector  ${dstSector} -o ${TMP_PATH}
 
-log "Verifying test block"
-callFlashUtil --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
-diff ${TMP_PATH} ${BLOCK_TEST_PATH}
+		if ! diff ${SECTOR_TEST_PATH} ${TMP_PATH}; then
+			log "\nReference sector\n"
+			hexdump -C ${SECTOR_TEST_PATH}
+			log "\nRead sector\n" 
+			hexdump -C ${TMP_PATH}
+			return 1
+		fi
+	done
 
-log "Erasing test block"
-callFlashUtil --erase-block ${TEST_BLOCK_IDX} --no-redudant-cycles
+	log "Verifying whole block"
+	{
+		head -c ${FLASH_BLOCK_SIZE}  /dev/zero | tr "\000" "\377" > ${BLOCK_TEST_PATH}
 
-log "Writing random contents to block"
-head -c ${FLASH_BLOCK_SIZE} /dev/zero | tr "\000" "\377" > ${BLOCK_TEST_PATH}
+		cat ${SECTOR_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${block} * ${FLASH_BLOCK_SIZE} + ${TEST_SECTOR_FIRST} * ${FLASH_SECTOR_SIZE} )) ${QUIET}
+		cat ${SECTOR_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${block} * ${FLASH_BLOCK_SIZE} + ${TEST_SECTOR_LAST}  * ${FLASH_SECTOR_SIZE} )) ${QUIET}
+	}
+	
+	callFlashUtil --read-block ${block} -o ${TMP_PATH}
+	
+	if ! diff ${BLOCK_TEST_PATH} ${TMP_PATH}; then
+		log "\nReference block\n"
+		hexdump -C ${SECTOR_TEST_PATH}
+		log "\nRead block\n" 
+		hexdump -C ${TMP_PATH}
+		return 1
+	fi
+}
 
-log "Testing erase sector"
-callFlashUtil --erase-sector $(( ${TEST_BLOCK_IDX} * ${FLASH_SECTORS_PER_BLOCK} ))
-callFlashUtil --read-block ${TEST_BLOCK_IDX} -o ${TMP_PATH}
+function test_erase_write_flash() {
+	log "\n------------------------- TEST, FLASH: erase, write, read"
 
-cat ${SECTOR_ERASED_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=0
-diff ${TMP_PATH} ${BLOCK_TEST_PATH}
+	rm -f ${TMP_PATH}
 
-log "Erasing whole flash"
-callFlashUtil --erase
+	log "Erasing whole chip"
+	callFlashUtil --erase --no-redudant-cycles
+	
+	log "Writing test image"
+	callFlashUtil --write -i ${FLASH_TEST_PATH} -V
+	
+	log "Reading whole chip"
+	callFlashUtil --read -o ${TMP_PATH}
 
-log "Writing whole flash with random data"
-head -c ${FLASH_SIZE}  /dev/urandom > ${TMP_PATH}
-expectedChkSum=$(md5sum -b ${TMP_PATH} | cut -d ' ' -f1)
+	diff ${FLASH_TEST_PATH} ${TMP_PATH}
+}
 
-callFlashUtil --write -i ${TMP_PATH} -V
-rm -f ${TMP_PATH}
-callFlashUtil --read -o ${TMP_PATH}
-
-currentChkSum=$(md5sum -b ${TMP_PATH} | cut -d ' ' -f1)
-
-if [ "${currentChkSum}" != "${expectedChkSum}" ]; then
-	echo "Invalid checksum! (${currentChkSum} != ${expectedChkSum})"
-fi
+test_erase_write_block
+test_erase_write_sector
+test_erase_write_flash
 
 log "SUCCESS"

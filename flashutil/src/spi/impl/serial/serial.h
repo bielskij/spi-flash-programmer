@@ -21,6 +21,9 @@ class Serial {
 		void read(void *buffer, std::size_t bufferSize, int timeoutMs);
 
 	private:
+		void _flush();
+
+	private:
 		class Impl;
 
 		std::unique_ptr<Impl> self;

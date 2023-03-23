@@ -218,8 +218,6 @@ static void _flashCmdEraseBlock(uint32_t address) {
 static void _flashCmdEraseSector(uint32_t address) {
 	Spi::Messages msgs;
 
-	PRINTFLN(("Erasing sector at address: %08x", address));
-
 	{
 		auto &msg = msgs.add();
 
@@ -319,7 +317,7 @@ struct Parameters {
 		this->inFd  = nullptr;
 
 		this->help             = false;
-		this->baud             = 1000000;
+		this->baud             = 500000;
 		this->idx              = -1;
 		this->read             = false;
 		this->readBlock        = false;
@@ -389,65 +387,96 @@ class ChipSelector {
 
 
 static void _flashRead(uint32_t address, const SpiFlashDevice &dev, uint8_t *buffer, size_t bufferSize) {
-	Spi::Messages msgs;
+	int defaultRetransmissions = spiDev->getConfig().getRetransmissions();
+
+	size_t bufferWritten = 0;
+	int    tries = 0;
 
 	DBG(("Reading %lu bytes from address: %08x", bufferSize, address));
 
-	{
-		auto &msg = msgs.add();
+	do {
+		ChipSelector selector(*spiDev.get());
 
-		msg
-			.reset()
-			.autoChipSelect(false)
-			.send()
-				.byte(0x03) // Read data (READ)
-
-				.byte((address >> 16) & 0xff) // Address
-				.byte((address >>  8) & 0xff)
-				.byte((address >>  0) & 0xff);
-
+		// Set reading address
 		{
-			ChipSelector selector(*spiDev.get());
+			Spi::Messages msgs;
 
+			msgs.add()
+				.reset()
+				.autoChipSelect(false)
+				.send()
+					.byte(0x03) // Read data (READ)
+
+					.byte((address >> 16) & 0xff) // Address
+					.byte((address >>  8) & 0xff)
+					.byte((address >>  0) & 0xff);
+
+			spiDev->transfer(msgs);
+		}
+
+		try {
+			Spi::Messages msgs;
+
+			msgs.add()
+				.reset()
+				.autoChipSelect(false);
+
+			// Disable retransmissions
 			{
-				size_t bufferWritten = 0;
+				Spi::Config c = spiDev->getConfig();
+
+				c.setRetransmissions(0);
+
+				spiDev->setConfig(c);
+			}
+
+			while (bufferSize > 0) {
+				size_t toRead = bufferSize >= dev.pageSize ? dev.pageSize : bufferSize;
+
+				msgs.at(0)
+					.recv()
+						.reset()
+						.bytes(toRead);
 
 				spiDev->transfer(msgs);
 
-				msg
-					.reset()
-					.autoChipSelect(false);
+				memcpy(buffer + bufferWritten, msgs.at(0).recv().data(), toRead);
 
-				while (bufferSize > 0) {
-					size_t toRead = bufferSize >= dev.pageSize ? dev.pageSize : bufferSize;
+				bufferWritten += toRead;
+				bufferSize    -= toRead;
+				address       += toRead;
 
-					msg
-						.recv()
-							.reset()
-							.bytes(toRead);
-
-					spiDev->transfer(msgs);
-
-					memcpy(buffer + bufferWritten, msgs.at(0).recv().data(), toRead);
-
-					bufferWritten += toRead;
-					bufferSize    -= toRead;
-				}
+				tries = 0;
+			}
+		} catch(const Exception &) {
+			if (++tries >= defaultRetransmissions) {
+				throw;
 			}
 		}
+	} while (bufferSize > 0);
+
+	// Restore retransmissions
+	{
+		Spi::Config c = spiDev->getConfig();
+
+		c.setRetransmissions(defaultRetransmissions);
+
+		spiDev->setConfig(c);
 	}
 }
 
 
-static void _doBlockErase(int blockIdx, const SpiFlashDevice &dev, bool noRedundantCycles) {
-	uint32_t blockAddress = blockIdx * dev.blockSize;
+static void _doErase(int idx, const SpiFlashDevice &dev, bool block, bool noRedundantCycles) {
+	size_t   eraseSize = block ? dev.blockSize : dev.sectorSize;
+	uint32_t address   = idx * (block ? dev.blockSize : dev.sectorSize);
+
 	bool needErase = ! noRedundantCycles;
 
 	if (! needErase) {
 		uint8_t pageBuffer[dev.pageSize];
 
-		for (int page = 0; page < dev.blockSize / dev.pageSize; page++) {
-			_flashRead(blockAddress + page * dev.pageSize, dev, pageBuffer, dev.pageSize);
+		for (int page = 0; page < eraseSize / dev.pageSize; page++) {
+			_flashRead(address + page * dev.pageSize, dev, pageBuffer, dev.pageSize);
 
 			for (int i = 0; i < dev.pageSize; i++) {
 				if (pageBuffer[i] != 0xff) {
@@ -462,14 +491,18 @@ static void _doBlockErase(int blockIdx, const SpiFlashDevice &dev, bool noRedund
 		}
 	}
 
-	PRINTF(("Erasing block %u (%08x): ", blockIdx, blockAddress));
+	PRINTF(("Erasing %s %u (%08x): ", block ? "block" : "sector", idx, address));
 
 	if (! needErase) {
 		PRINTFLN(("SKIPPED (already erased)"));
 
 	} else {
 		_flashCmdWriteEnable();
-		_flashCmdEraseBlock(blockAddress);
+		if (block) {
+			_flashCmdEraseBlock(address);
+		} else {
+			_flashCmdEraseSector(address);
+		}
 		_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
 
 		PRINTFLN(("DONE"));
@@ -477,7 +510,7 @@ static void _doBlockErase(int blockIdx, const SpiFlashDevice &dev, bool noRedund
 }
 
 
-static void _doReadToStream(uint32_t address, uint32_t size, const SpiFlashDevice &dev, std::ostream &stream) {
+static void _doReadToStream(uint32_t address, size_t size, const SpiFlashDevice &dev, std::ostream &stream) {
 	if (address + size > dev.blockCount * dev.blockSize) {
 		throw_Exception("Area to read is located out of device bounds!");
 	}
@@ -520,7 +553,7 @@ static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevi
 			if (! needWrite) {
 				uint8_t flashBuffer[dev.pageSize];
 
-				_flashRead(address, dev, flashBuffer, toRead);
+				_flashRead(address, dev, flashBuffer, read);
 
 				if (memcmp(flashBuffer, pageBuffer, read) != 0) {
 					needWrite = true;
@@ -773,8 +806,6 @@ int main(int argc, char *argv[]) {
 
 				_flashCmdGetStatus(&status);
 
-				DBG(("status reg: %02x", status.raw));
-
 				if ((status.raw & dev->protectMask) != 0) {
 					PRINTFLN(("Flash is protected!"));
 				}
@@ -815,12 +846,16 @@ int main(int argc, char *argv[]) {
 
 				if (params.erase) {
 					for (int block = 0; block < dev->blockCount; block++) {
-						_doBlockErase(block, *dev, params.omitRedundantOps);
+						_doErase(block, *dev, true, params.omitRedundantOps);
 					}
 				}
 
 				if (params.eraseBlock) {
-					_doBlockErase(params.idx, *dev, params.omitRedundantOps);
+					if (params.idx >= dev->blockCount) {
+						throw_Exception("Block index is out of bounds! (" + std::to_string(params.idx) + " >= " + std::to_string(dev->blockCount) + ")");
+					}
+
+					_doErase(params.idx, *dev, true, params.omitRedundantOps);
 				}
 
 				if (params.eraseSector) {
@@ -828,9 +863,7 @@ int main(int argc, char *argv[]) {
 						throw_Exception("Sector index is out of bounds! (" + std::to_string(params.idx) + " >= " + std::to_string(dev->sectorCount) + ")");
 					}
 
-					_flashCmdWriteEnable();
-					_flashCmdEraseSector(params.idx * dev->sectorSize);
-					_flashWriteWait(WRITE_WAIT_TIMEOUT_MS);
+					_doErase(params.idx, *dev, false, params.omitRedundantOps);
 				}
 
 				if (params.write) {
@@ -840,7 +873,7 @@ int main(int argc, char *argv[]) {
 					_doWriteFromStream(params.idx * dev->blockSize, dev->blockSize, *dev, *params.inFd, params.omitRedundantOps);
 
 				} else if (params.writeSector) {
-					_doWriteFromStream(0, dev->blockCount * dev->blockSize, *dev, *params.inFd, params.omitRedundantOps);
+					_doWriteFromStream(params.idx * dev->sectorSize, dev->sectorSize, *dev, *params.inFd, params.omitRedundantOps);
 				}
 
 				if (params.read || params.readBlock || params.readSector) {
@@ -871,7 +904,6 @@ int main(int argc, char *argv[]) {
 				if (params.verify) {
 					uint8_t referenceBuffer[dev->blockSize];
 					uint8_t buffer[dev->blockSize];
-					size_t  bufferWritten;
 					int     blockNo = 0;
 
 					if (params.write) {
@@ -900,15 +932,15 @@ int main(int argc, char *argv[]) {
 							break;
 						}
 
-						PRINTFLN(("Verifying block %d", blockNo));
+						PRINTF(("Verifying block %d: ", blockNo));
 
 						_flashRead(blockNo * dev->blockSize, *dev, buffer, compareSize);
 
-						if (memcmp(buffer, referenceBuffer, bufferWritten) == 0) {
-							PRINTFLN(("Verification of block %d -> SUCCESS", blockNo));
+						if (memcmp(buffer, referenceBuffer, compareSize) == 0) {
+							PRINTFLN(("DONE"));
 
 						} else {
-							PRINTFLN(("Verification of block %d -> FAILED", blockNo));
+							PRINTFLN(("FAILED"));
 
 							ret = 1;
 							break;

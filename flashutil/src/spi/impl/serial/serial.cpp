@@ -96,10 +96,10 @@ Serial::Serial(const std::string &serialPath, int baud) {
 		if (tcsetattr(fd, TCSANOW, &options) != 0) {
 			throw_Exception("Unable to set serial port options!");
 		}
-
-		tcflush(fd, TCIOFLUSH);
 	}
 #endif
+
+	this->_flush();
 }
 
 
@@ -112,6 +112,15 @@ void Serial::write(void *buffer, std::size_t bufferSize, int timeoutMs) {
 	if (self->serial.write_some(boost::asio::buffer(buffer, bufferSize)) != bufferSize) {
 		throw_Exception("Cannot write data to the output!");
 	}
+}
+
+
+void Serial::_flush() {
+#if defined(__unix__)
+	int fd = self->serial.lowest_layer().native_handle();
+
+	tcflush(fd, TCIOFLUSH);
+#endif
 }
 
 
@@ -157,6 +166,8 @@ void Serial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 				self->timeoutTimer.cancel();
 				self->serial.cancel();
 
+				this->_flush();
+
 				throw_Exception("Error occurred while reading data from serial port!");
 			}
 			break;
@@ -174,6 +185,8 @@ void Serial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 				DBG(("RESULT_TIMEOUT"));
 
 				self->serial.cancel();
+
+				this->_flush();
 
 				throw_Exception("Timeout occurred while waiting on data");
 			}

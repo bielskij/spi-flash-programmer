@@ -82,11 +82,32 @@ class Spi {
 				std::vector<Message> _msgs;
 		};
 
+		class Config {
+			public:
+				Config() {
+					this->_retransmissions = 3;
+				}
+
+				int getRetransmissions() const {
+					return this->_retransmissions;
+				}
+
+				void setRetransmissions(int val) {
+					this->_retransmissions = val;
+				}
+
+			private:
+				int _retransmissions;
+		};
+
 	public:
 		virtual ~Spi() {}
 
 		virtual void transfer(Messages &msgs) = 0;
 		virtual void chipSelect(bool select) = 0;
+
+		virtual Config getConfig() = 0;
+		virtual void   setConfig(const Config &config) = 0;
 
 	protected:
 		Spi() {}
