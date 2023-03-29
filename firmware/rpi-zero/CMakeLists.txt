@@ -35,10 +35,16 @@ add_compile_options(
 add_executable(firmware
 	src/main.c
 	src/usb_descriptors.c
+
+	../../firmware/common/src/programmer.c
+	../../common/src/crc8.c
 )
 
 target_include_directories(firmware PRIVATE
 	include
+
+	../common/include
+	../../common/include
 )
 
 target_link_libraries(firmware PRIVATE 

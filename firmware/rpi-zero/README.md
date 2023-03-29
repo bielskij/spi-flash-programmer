@@ -13,4 +13,6 @@ cd firmware/rpi-zero/pico-sdk
 git submodule update --init
 ```
 
-s
+```
+sudo usbreset cafe:4001
+```
