@@ -34,8 +34,20 @@ add_compile_options(
 
 add_executable(firmware
 	src/main.c
+	src/usb_descriptors.c
 )
 
-target_link_libraries(firmware PRIVATE pico_stdlib)
+target_include_directories(firmware PRIVATE
+	include
+)
+
+target_link_libraries(firmware PRIVATE 
+	pico_stdlib
+	hardware_uart
+	hardware_pio
+	hardware_spi
+	tinyusb_device
+	tinyusb_board
+)
 
 pico_add_extra_outputs(firmware)
