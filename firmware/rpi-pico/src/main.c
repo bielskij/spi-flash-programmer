@@ -6,7 +6,9 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
+#include "pico/stdlib.h"
 #include "hardware/spi.h"
 
 #include "tusb.h"
@@ -22,12 +24,31 @@ static uint8_t _programmerMemoryPool[PROGRAMMER_MEMORY_POOL_SIZE] = { 0 };
 
 
 static void _spiTransferCallback(void *buffer, uint16_t txSize, uint16_t rxSize, void *callbackData) {
+	uint16_t transferSize = txSize > rxSize ? txSize : rxSize;
+	uint8_t  transferBuffer[transferSize];
 
+	// TODO: reimplement transfer function
+
+	// Copy TX
+	memcpy(transferBuffer, buffer, txSize);
+	// Fill empty space
+	memset(transferBuffer + txSize, 0xff, transferSize - txSize);
+
+	spi_write_read_blocking(spi_default, transferBuffer, transferBuffer, transferSize);
+
+	// Copy received data
+	memcpy(buffer, transferBuffer, rxSize);
 }
 
 
 static void _spiCsCallback(bool assert, void *callbackData) {
-
+	asm volatile("nop \n nop \n nop"); // FIXME
+	if (assert) {
+		gpio_put(PICO_DEFAULT_SPI_CSN_PIN, 0);
+	} else {
+		gpio_put(PICO_DEFAULT_SPI_CSN_PIN, 1);
+	}
+	asm volatile("nop \n nop \n nop"); // FIXME
 }
 
 
@@ -55,6 +76,16 @@ static void _cdcTask(void) {
 int main() {
 	board_init();
 	tusb_init();
+
+	spi_init(spi_default, 1000 * 1000);
+
+	gpio_set_function(PICO_DEFAULT_SPI_RX_PIN , GPIO_FUNC_SPI);
+	gpio_set_function(PICO_DEFAULT_SPI_TX_PIN,  GPIO_FUNC_SPI);
+	gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
+
+	gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
+	gpio_put(PICO_DEFAULT_SPI_CSN_PIN, 1);
+	gpio_set_dir(PICO_DEFAULT_SPI_CSN_PIN, GPIO_OUT);
 
 	{
 		ProgrammerSetupParameters params;
