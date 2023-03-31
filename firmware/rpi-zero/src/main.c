@@ -11,7 +11,7 @@
 
 #include "tusb.h"
 
-#include "programmer.h"
+#include "firmware/programmer.h"
 
 #define CDC_CHANNEL 0
 

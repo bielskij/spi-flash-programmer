@@ -10,7 +10,7 @@
 #include "protocol.h"
 #include "crc8.h"
 
-#include "programmer.h"
+#include "firmware/programmer.h"
 
 
 typedef enum _RxState {

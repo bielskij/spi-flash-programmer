@@ -36,7 +36,7 @@ add_executable(firmware
 	src/main.c
 	src/usb_descriptors.c
 
-	../../firmware/common/src/programmer.c
+	../common/src/firmware/programmer.c
 	../../common/src/crc8.c
 )
 
