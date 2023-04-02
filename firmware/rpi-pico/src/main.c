@@ -23,21 +23,28 @@
 static uint8_t _programmerMemoryPool[PROGRAMMER_MEMORY_POOL_SIZE] = { 0 };
 
 
-static void _spiTransferCallback(void *buffer, uint16_t txSize, uint16_t rxSize, void *callbackData) {
-	uint16_t transferSize = txSize > rxSize ? txSize : rxSize;
-	uint8_t  transferBuffer[transferSize];
+static void __not_in_flash_func(_spiTransferCallback)(void *buffer, uint16_t txSize, uint16_t rxSize, void *callbackData) {
+	uint16_t loopSize = txSize > rxSize ? txSize : rxSize;
 
-	// TODO: reimplement transfer function
+	for (uint16_t i = 0; i < loopSize; i++) {
+		while (! spi_is_writable(spi_default)) {}
 
-	// Copy TX
-	memcpy(transferBuffer, buffer, txSize);
-	// Fill empty space
-	memset(transferBuffer + txSize, 0xff, transferSize - txSize);
+		if (i < txSize) {
+			spi_get_hw(spi_default)->dr = ((uint8_t *)buffer)[i];
 
-	spi_write_read_blocking(spi_default, transferBuffer, transferBuffer, transferSize);
+		} else {
+			spi_get_hw(spi_default)->dr = 0xff;
+		}
 
-	// Copy received data
-	memcpy(buffer, transferBuffer, rxSize);
+		while (! spi_is_readable(spi_default)) {}
+
+		if (i < rxSize) {
+			((uint8_t *)buffer)[i] = spi_get_hw(spi_default)->dr;
+
+		} else {
+			(void) spi_get_hw(spi_default)->dr;
+		}
+	}
 }
 
 
@@ -45,6 +52,7 @@ static void _spiCsCallback(bool assert, void *callbackData) {
 	asm volatile("nop \n nop \n nop"); // FIXME
 	if (assert) {
 		gpio_put(PICO_DEFAULT_SPI_CSN_PIN, 0);
+
 	} else {
 		gpio_put(PICO_DEFAULT_SPI_CSN_PIN, 1);
 	}
@@ -77,7 +85,7 @@ int main() {
 	board_init();
 	tusb_init();
 
-	spi_init(spi_default, 1000 * 1000);
+	spi_init(spi_default, 60 * 1000 * 1000);
 
 	gpio_set_function(PICO_DEFAULT_SPI_RX_PIN , GPIO_FUNC_SPI);
 	gpio_set_function(PICO_DEFAULT_SPI_TX_PIN,  GPIO_FUNC_SPI);
