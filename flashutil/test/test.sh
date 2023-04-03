@@ -171,8 +171,8 @@ function test_erase_write_sector() {
 	{
 		head -c ${FLASH_BLOCK_SIZE}  /dev/zero | tr "\000" "\377" > ${BLOCK_TEST_PATH}
 
-		cat ${SECTOR_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${block} * ${FLASH_BLOCK_SIZE} + ${TEST_SECTOR_FIRST} * ${FLASH_SECTOR_SIZE} )) ${QUIET}
-		cat ${SECTOR_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${block} * ${FLASH_BLOCK_SIZE} + ${TEST_SECTOR_LAST}  * ${FLASH_SECTOR_SIZE} )) ${QUIET}
+		cat ${SECTOR_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${block} * ${FLASH_BLOCK_SIZE} + ${TEST_SECTOR_FIRST} * ${FLASH_SECTOR_SIZE} ))
+		cat ${SECTOR_TEST_PATH} | dd of=${BLOCK_TEST_PATH} bs=1 conv=notrunc seek=$(( ${block} * ${FLASH_BLOCK_SIZE} + ${TEST_SECTOR_LAST}  * ${FLASH_SECTOR_SIZE} ))
 	}
 	
 	callFlashUtil --read-block ${block} -o ${TMP_PATH}
