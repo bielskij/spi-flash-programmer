@@ -61,7 +61,9 @@ static void _spiCsCallback(bool assert, void *callbackData) {
 
 
 static void _serialSendCallback(uint8_t data, void *callbackData) {
-	tud_cdc_n_write_char(CDC_CHANNEL, data);
+	while (tud_cdc_n_write_char(CDC_CHANNEL, data) == 0) {
+		tud_task();
+	}
 }
 
 
