@@ -1,10 +1,13 @@
-# Arduino SPI flash programmer.
+# SPI flash programmer.
 
 This project is an another SPI flash programmer. I need a SPI flash programmer to burn a flash chip to repair LCD monitor. As I hadn't any programmer I decided to make one by my own using Arduino nano. 
 
 As a result a complete solution was implemented.
 
 ## Features.
+  * supported modules:
+    * Arduino nano compatible
+    * RPi Pico (RP2040)
   * universal SPI flash programmer
     * Predefined chips:
         * MX25L2026E
@@ -17,10 +20,16 @@ As a result a complete solution was implemented.
   * unprotect operation
   * erase/write verification
   * communication protocol secured by CRC checksum
-  * high-speed SPI (8Mhz)
-  * high-speed USART (1Mbaud)
+  * high-speed SPI 
+    * 8MHz - Arduino
+    * 60MHz - RPi Pico
+  * high-speed USART/CDC
+    * 1Mbaud - Arduino
+    * 6Mbit - RPi Pico
 
-## Arduino connections.
+## Arduino
+
+### Arduino connections.
   * D10 (PB2) ------ CS   (chip select)
   * D11 (PB3) ------ MOSI (SPI data output)
   * D12 (PB4) ------ MISO (SPI data input)
@@ -47,6 +56,38 @@ make HEX_FILE=dist/firmware_16mhz_19200bps.hex burn
 ```
 
 By default, **burn** target writes the firmware using avrdude via arduino programmer (arduino resistant bootloader). There is an other target **burn-usbasp** for writing firmware to raw atmega328p (USBasp programmer, ISP connection).
+
+## RPi-Pico
+
+### Linux Environment preparation.
+
+```
+sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+```
+
+###  Building and writing firmware.
+
+```
+cd firmware/rpi-pico
+git submodule init
+git submodule update
+
+cd pico-sdk
+git submodule init
+git submodule update
+
+cd --
+mkdir build && cd build
+cmake ..
+make all
+```
+
+### RPi-Pico connections.
+  * 21 (GP16) ------ MISO (SPI data input)
+  * 22 (GP17) ------ CS   (chip select)
+  * 24 (GP18) ------ SCK  (SPI clock)
+  * 25 (GP19) ------ MOSI (SPI data output)
+
 
 ## Building flashutil.
 ```
