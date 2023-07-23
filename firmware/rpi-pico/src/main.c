@@ -98,7 +98,7 @@ int main() {
 	gpio_set_dir(PICO_DEFAULT_SPI_CSN_PIN, GPIO_OUT);
 
 	{
-		ProgrammerSetupParameters params;
+		ProtocolReveicerSetupParameters params;
 
 		params.spiCsCallback       = _spiCsCallback;
 		params.spiTransferCallback = _spiTransferCallback;

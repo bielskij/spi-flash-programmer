@@ -8,16 +8,23 @@
 #ifndef FIRMWARE_INCLUDE_PROTOCOL_H_
 #define FIRMWARE_INCLUDE_PROTOCOL_H_
 
+#include <string>
+
 #define PROTO_VERSION_MAJOR 1
 #define PROTO_VERSION_MINOR 0
 
 /*
- * CRC8 start byte and polynomial definition.
+ * CRC8 start va;ue and polynomial definition.
  */
 #define PROTO_CRC8_POLY  0xAB
 #define PROTO_CRC8_START 0x00
 
-#define PROTO_SYNC_NIBBLE 0xd0
+#define PROTO_SYNC_NIBBLE_MASK 0xf0
+#define PROTO_SYNC_NIBBLE      0xd0
+
+#define PROTO_CMD_NIBBLE_MASK  0x07
+
+#define PROTO_FRAME_MIN_SIZE 4
 
 /*
  * VLEN field definition.
@@ -30,15 +37,16 @@
 /*
  * 1) Protocol frame.
  *
- * [      8b      ][ 1/2B ][         LEN        ]
- * [  4b  ][  4b  ][      ][      ][    ][      ]
- * [ SYNC ][ CTRL ][ VLEN ][ PLD  ][... ][ CRC8 ]
+ * [      8b      ][ 1B ][ 1/2B ][       VLEN       ]
+ * [  4b  ][  4b  ][    ][      ][     ][   ][      ]
+ * [ SYNC ][ CTRL ][ ID ][ VLEN ][ PLD ][...][ CRC8 ]
  *
- * SYNC: Synchronization byte. Always 0xd0.
+ * SYNC: Synchronization byte. Always 0xd.
  * CTRL: [R...] command (request) or error code (response) MSB bit is reserved for future use. Should be set to 0.
- * VLEN: Length of command data (includes payload length and last byte containing CRC checksum. Does not include sync+cmd byte).
- * PLD:  frame payload
- * CRC8: checksum of overall frame
+ * ID:   Command unique identifier. Used to recognize response frame.
+ * VLEN: Length of payload data (does not include CRC8 field)
+ * PLD:  Frame payload
+ * CRC8: Checksum of overall frame
  */
 
 /*
@@ -49,18 +57,22 @@
  *  - HW name
  *  - maximal payload size
  *
- * [  1B  ][    1B   ][    1B   ][    1B    ][  NAME_LEN   ][   1/2B   ]
- * [ 0xd0 ][ VER_MAJ ][ VER_MIN ][ NAME_LEN ][ NAME ][ ... ][ PLD_SIZE ]
+ * Request payload:
+ *  - No payload
+ *
+ * Response payload:
+ *  [    4b   ][    4b   ][   1/2B   ]
+ *  [ VER_MAJ ][ VER_MIN ][ PLD_SIZE ]
  */
-#define PROTO_CMD_GET_INFO     0x00
+#define PROTO_CMD_GET_INFO     0x0
 
 /*
  * 3) CMD_SPI_TRANSFER
  *
  * Do SPI data transfer.
  *
- * [ 1B ][ 1B  ][     1/2B    ][  1/2B   ][     1/2B    ][  1/2B   ][     TX_SIZE    ][     RX_SIZE    ]
- * [0xd1][FLAGS][ TX_SKP_VLEN ][ TX_VLEN ][ RX_SKP_VLEN ][ RX_VLEN ][ TX_DATA ][ ... ][ RX_DATA ][ ... ]
+ * [ 1B  ][     1/2B    ][  1/2B   ][     1/2B    ][  1/2B   ][     TX_SIZE    ][     RX_SIZE    ]
+ * [FLAGS][ TX_SKP_VLEN ][ TX_VLEN ][ RX_SKP_VLEN ][ RX_VLEN ][ TX_DATA ][ ... ][ RX_DATA ][ ... ]
  *
  * Flags:
  *  0000 0001 - has TX (TX_SKP_VLEN, TX_VLEN, TX_DATA omitted if the flag is not set)
@@ -68,7 +80,13 @@
  *  0000 0100 - Assert CS at the beginning
  *  0000 1000 - Release CS at the end
  */
-#define PROTO_CMD_SPI_TRANSFER 0x01
+//#define PROTO_CMD_SPI_TRANSFER 0x01
+
+/*
+ * It is not a real command. This value is reserved by protocol deserializer to
+ * inform about processing error occurrence.
+ */
+#define PROTO_CMD_ERROR 0xff
 
 /*
  * Error codes.
@@ -79,6 +97,5 @@
 #define PROTO_ERROR_TIMEOUT           0x03
 #define PROTO_ERROR_INVALID_LENGTH    0x04
 #define PROTO_ERROR_INVALID_CRC       0x05
-
 
 #endif /* FIRMWARE_INCLUDE_PROTOCOL_H_ */

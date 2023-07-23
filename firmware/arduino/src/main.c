@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
 	spi_initialize();
 
 	{
-		ProgrammerSetupParameters params;
+		ProtocolReveicerSetupParameters params;
 
 		params.memory     = _dataBuffer;
 		params.memorySize = DATA_BUFFER_SIZE;
