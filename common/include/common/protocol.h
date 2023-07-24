@@ -22,7 +22,7 @@
 
 #define PROTO_CMD_NIBBLE_MASK  0x07
 
-#define PROTO_FRAME_MIN_SIZE 4
+#define PROTO_FRAME_MIN_SIZE 5
 
 /*
  * VLEN field definition.

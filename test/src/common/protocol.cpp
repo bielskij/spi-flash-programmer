@@ -150,3 +150,91 @@ TEST(common_protocol, packet_long_payload) {
 		}
 	}
 }
+
+
+TEST(common_protocol, packet_error_payload_too_long) {
+	uint8_t txBuffer[MEM_SIZE] = { 0 };
+	size_t  txBufferWritten;
+
+	// Request bigger than memory buffer
+	{
+		ProtoPkt req;
+
+		req.code        = PROTO_CMD_GET_INFO;
+		req.id          = 0x12;
+		req.payload     = txBuffer;
+		req.payloadSize = sizeof(txBuffer) - 1;
+
+		ASSERT_EQ(proto_pkt_ser(&req, txBuffer, sizeof(txBuffer)), 0);
+
+		req.payloadSize = sizeof(txBuffer) - PROTO_FRAME_MIN_SIZE;
+
+		ASSERT_NE(proto_pkt_ser(&req, txBuffer, sizeof(txBuffer)), 0);
+	}
+
+	{
+		uint8_t rxBuffer[MEM_SIZE - PROTO_FRAME_MIN_SIZE - 1] = { 0 };
+
+		ProtoPktDes ctx;
+		ProtoPkt pkt;
+
+		proto_pkt_des_setup(&ctx, rxBuffer, sizeof(rxBuffer));
+
+		pkt.payload     = (uint8_t *) 0x1234;
+		pkt.payloadSize = 1231;
+
+		for (size_t i = 0; i < sizeof(txBuffer); i++) {
+			auto ret = proto_pkt_des_putByte(&ctx, txBuffer[i], &pkt);
+
+			if (ret != PROTO_PKT_DES_RET_IDLE) {
+				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_ERROR_INVALID_LENGTH);
+
+				ASSERT_EQ(pkt.code, PROTO_CMD_GET_INFO);
+				ASSERT_EQ(pkt.id,   0x12);
+			}
+		}
+	}
+}
+
+
+TEST(common_protocol, packet_error_invalid_crc) {
+	uint8_t txBuffer[MEM_SIZE] = { 0 };
+	size_t  txBufferWritten;
+
+	// Request bigger than memory buffer
+	{
+		ProtoPkt req;
+
+		req.code        = PROTO_CMD_GET_INFO;
+		req.id          = 0x12;
+		req.payload     = NULL;
+		req.payloadSize = 0;
+
+		txBufferWritten = proto_pkt_ser(&req, txBuffer, sizeof(txBuffer));
+
+		txBuffer[txBufferWritten - 1] = 0xff;
+	}
+
+	{
+		uint8_t rxBuffer[MEM_SIZE - PROTO_FRAME_MIN_SIZE - 1] = { 0 };
+
+		ProtoPktDes ctx;
+		ProtoPkt pkt;
+
+		proto_pkt_des_setup(&ctx, rxBuffer, sizeof(rxBuffer));
+
+		pkt.payload     = (uint8_t *) 0x1234;
+		pkt.payloadSize = 1231;
+
+		for (size_t i = 0; i < sizeof(txBuffer); i++) {
+			auto ret = proto_pkt_des_putByte(&ctx, txBuffer[i], &pkt);
+
+			if (ret != PROTO_PKT_DES_RET_IDLE) {
+				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_ERROR_INVALID_CRC);
+
+				ASSERT_EQ(pkt.code, PROTO_CMD_GET_INFO);
+				ASSERT_EQ(pkt.id,   0x12);
+			}
+		}
+	}
+}

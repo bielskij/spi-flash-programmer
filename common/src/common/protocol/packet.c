@@ -149,7 +149,7 @@ uint8_t proto_pkt_des_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *request)
 	}
 
 	if (ctx->state == STATE_CHECK_PAYLOAD) {
-		if (ctx->dataSize > ctx->memSize - PROTO_FRAME_MIN_SIZE) {
+		if (ctx->dataSize > ctx->memSize) {
 			error = PROTO_ERROR_INVALID_LENGTH;
 
 		} else {
