@@ -23,7 +23,7 @@ typedef enum _State {
 } State;
 
 
-uint16_t proto_pkt_ser(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize) {
+uint16_t proto_pkt_enc(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize) {
 	uint16_t ret = 0;
 
 	do {
@@ -36,10 +36,8 @@ uint16_t proto_pkt_ser(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize) {
 
 		ret += proto_int_val_encode(pkt->payloadSize, buffer + ret);
 
-		if (pkt->payloadSize) {
-			memcpy(buffer + ret, pkt->payload, pkt->payloadSize);
-
-			ret += pkt->payloadSize;
+		for (uint16_t i = 0; i < pkt->payloadSize; i++) {
+			buffer[ret++] = ((uint8_t *)pkt->payload)[i];
 		}
 
 		buffer[ret++] = crc8_get(buffer, ret, PROTO_CRC8_POLY, PROTO_CRC8_START);
@@ -49,15 +47,15 @@ uint16_t proto_pkt_ser(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize) {
 }
 
 
-void proto_pkt_des_setup(ProtoPktDes *ctx, uint8_t *buffer, uint16_t bufferSize) {
+void proto_pkt_dec_setup(ProtoPktDes *ctx, uint8_t *buffer, uint16_t bufferSize) {
 	ctx->mem     = buffer;
 	ctx->memSize = bufferSize;
 
-	proto_pkt_des_reset(ctx);
+	proto_pkt_dec_reset(ctx);
 }
 
 
-uint8_t proto_pkt_des_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *request) {
+uint8_t proto_pkt_dec_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *request) {
 	uint8_t error = PROTO_NO_ERROR;
 
 	switch (ctx->state) {
@@ -168,7 +166,7 @@ uint8_t proto_pkt_des_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *request)
 		}
 
 		if (ret != PROTO_PKT_DES_RET_IDLE) {
-			proto_pkt_des_reset(ctx);
+			proto_pkt_dec_reset(ctx);
 		}
 
 		return ret;
@@ -176,7 +174,7 @@ uint8_t proto_pkt_des_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *request)
 }
 
 
-void proto_pkt_des_reset(ProtoPktDes *ctx) {
+void proto_pkt_dec_reset(ProtoPktDes *ctx) {
 	ctx->state    = STATE_WAIT_SYNC;
 	ctx->crc      = PROTO_CRC8_START;
 	ctx->id       = ID_UNKNOWN;

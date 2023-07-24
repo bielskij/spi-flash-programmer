@@ -23,6 +23,8 @@ add_executable(unit_tests
 	
 	../common/src/common/protocol/common.c
 	../common/src/common/protocol/packet.c
+	../common/src/common/protocol/request.c
+	../common/src/common/protocol/response.c
 	
 	${TEST_FILES}
 )

@@ -9,6 +9,9 @@
 #define COMMON_PROTOCOL_REQUEST_H_
 
 #include <stdint.h>
+#include <stdbool.h>
+
+#include "common/protocol/packet.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +30,11 @@ typedef struct _ProtoReq {
 		ProtoReqGetInfo getInfo;
 	} request;
 } ProtoReq;
+
+
+bool proto_req_dec(ProtoReq *request, ProtoPkt *pkt);
+
+bool proto_req_enc(ProtoReq *request, ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize);
 
 #ifdef __cplusplus
 }

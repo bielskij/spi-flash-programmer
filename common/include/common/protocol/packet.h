@@ -41,13 +41,13 @@ typedef struct _ProtoPktDesCtx {
 } ProtoPktDes;
 
 
-uint16_t proto_pkt_ser(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize);
+uint16_t proto_pkt_enc(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize);
 
-void proto_pkt_des_setup(ProtoPktDes *ctx, uint8_t *buffer, uint16_t bufferSize);
+void proto_pkt_dec_setup(ProtoPktDes *ctx, uint8_t *buffer, uint16_t bufferSize);
 
-uint8_t proto_pkt_des_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *pkt);
+uint8_t proto_pkt_dec_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *pkt);
 
-void proto_pkt_des_reset(ProtoPktDes *ctx);
+void proto_pkt_dec_reset(ProtoPktDes *ctx);
 
 #ifdef __cplusplus
 }

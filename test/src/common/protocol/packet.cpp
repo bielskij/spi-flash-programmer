@@ -27,7 +27,7 @@ TEST(common_protocol, packet_no_payload) {
 		req.payload     = NULL;
 		req.payloadSize = 0;
 
-		txBufferWritten = proto_pkt_ser(&req, txBuffer, sizeof(txBuffer));
+		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -38,13 +38,13 @@ TEST(common_protocol, packet_no_payload) {
 		ProtoPktDes ctx;
 		ProtoPkt pkt;
 
-		proto_pkt_des_setup(&ctx, rxBuffer, sizeof(rxBuffer));
+		proto_pkt_dec_setup(&ctx, rxBuffer, sizeof(rxBuffer));
 
 		pkt.payload     = (uint8_t *) 0x1234;
 		pkt.payloadSize = 1231;
 
 		for (size_t i = 0; i < sizeof(txBuffer); i++) {
-			auto ret = proto_pkt_des_putByte(&ctx, txBuffer[i], &pkt);
+			auto ret = proto_pkt_dec_putByte(&ctx, txBuffer[i], &pkt);
 
 			if (ret != PROTO_PKT_DES_RET_IDLE) {
 				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_NO_ERROR);
@@ -74,7 +74,7 @@ TEST(common_protocol, packet_short_payload) {
 		req.payload     = payload.data();
 		req.payloadSize = payload.length();
 
-		txBufferWritten = proto_pkt_ser(&req, txBuffer, sizeof(txBuffer));
+		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -85,13 +85,13 @@ TEST(common_protocol, packet_short_payload) {
 		ProtoPktDes ctx;
 		ProtoPkt pkt;
 
-		proto_pkt_des_setup(&ctx, rxBuffer, sizeof(rxBuffer));
+		proto_pkt_dec_setup(&ctx, rxBuffer, sizeof(rxBuffer));
 
 		pkt.payload     = (uint8_t *) 0x1234;
 		pkt.payloadSize = 1231;
 
 		for (size_t i = 0; i < sizeof(txBuffer); i++) {
-			auto ret = proto_pkt_des_putByte(&ctx, txBuffer[i], &pkt);
+			auto ret = proto_pkt_dec_putByte(&ctx, txBuffer[i], &pkt);
 
 			if (ret != PROTO_PKT_DES_RET_IDLE) {
 				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_NO_ERROR);
@@ -120,7 +120,7 @@ TEST(common_protocol, packet_long_payload) {
 		req.payload     = payload.data();
 		req.payloadSize = payload.length();
 
-		txBufferWritten = proto_pkt_ser(&req, txBuffer, sizeof(txBuffer));
+		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -131,13 +131,13 @@ TEST(common_protocol, packet_long_payload) {
 		ProtoPktDes ctx;
 		ProtoPkt pkt;
 
-		proto_pkt_des_setup(&ctx, rxBuffer, sizeof(rxBuffer));
+		proto_pkt_dec_setup(&ctx, rxBuffer, sizeof(rxBuffer));
 
 		pkt.payload     = (uint8_t *) 0x1234;
 		pkt.payloadSize = 1231;
 
 		for (size_t i = 0; i < sizeof(txBuffer); i++) {
-			auto ret = proto_pkt_des_putByte(&ctx, txBuffer[i], &pkt);
+			auto ret = proto_pkt_dec_putByte(&ctx, txBuffer[i], &pkt);
 
 			if (ret != PROTO_PKT_DES_RET_IDLE) {
 				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_NO_ERROR);
@@ -165,11 +165,11 @@ TEST(common_protocol, packet_error_payload_too_long) {
 		req.payload     = txBuffer;
 		req.payloadSize = sizeof(txBuffer) - 1;
 
-		ASSERT_EQ(proto_pkt_ser(&req, txBuffer, sizeof(txBuffer)), 0);
+		ASSERT_EQ(proto_pkt_enc(&req, txBuffer, sizeof(txBuffer)), 0);
 
 		req.payloadSize = sizeof(txBuffer) - PROTO_FRAME_MIN_SIZE;
 
-		ASSERT_NE(proto_pkt_ser(&req, txBuffer, sizeof(txBuffer)), 0);
+		ASSERT_NE(proto_pkt_enc(&req, txBuffer, sizeof(txBuffer)), 0);
 	}
 
 	{
@@ -178,13 +178,13 @@ TEST(common_protocol, packet_error_payload_too_long) {
 		ProtoPktDes ctx;
 		ProtoPkt pkt;
 
-		proto_pkt_des_setup(&ctx, rxBuffer, sizeof(rxBuffer));
+		proto_pkt_dec_setup(&ctx, rxBuffer, sizeof(rxBuffer));
 
 		pkt.payload     = (uint8_t *) 0x1234;
 		pkt.payloadSize = 1231;
 
 		for (size_t i = 0; i < sizeof(txBuffer); i++) {
-			auto ret = proto_pkt_des_putByte(&ctx, txBuffer[i], &pkt);
+			auto ret = proto_pkt_dec_putByte(&ctx, txBuffer[i], &pkt);
 
 			if (ret != PROTO_PKT_DES_RET_IDLE) {
 				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_ERROR_INVALID_LENGTH);
@@ -210,7 +210,7 @@ TEST(common_protocol, packet_error_invalid_crc) {
 		req.payload     = NULL;
 		req.payloadSize = 0;
 
-		txBufferWritten = proto_pkt_ser(&req, txBuffer, sizeof(txBuffer));
+		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
 
 		txBuffer[txBufferWritten - 1] = 0xff;
 	}
@@ -221,13 +221,13 @@ TEST(common_protocol, packet_error_invalid_crc) {
 		ProtoPktDes ctx;
 		ProtoPkt pkt;
 
-		proto_pkt_des_setup(&ctx, rxBuffer, sizeof(rxBuffer));
+		proto_pkt_dec_setup(&ctx, rxBuffer, sizeof(rxBuffer));
 
 		pkt.payload     = (uint8_t *) 0x1234;
 		pkt.payloadSize = 1231;
 
 		for (size_t i = 0; i < sizeof(txBuffer); i++) {
-			auto ret = proto_pkt_des_putByte(&ctx, txBuffer[i], &pkt);
+			auto ret = proto_pkt_dec_putByte(&ctx, txBuffer[i], &pkt);
 
 			if (ret != PROTO_PKT_DES_RET_IDLE) {
 				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_ERROR_INVALID_CRC);
