@@ -10,22 +10,37 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef struct _ProtocolResponseGetInfo {
+typedef struct _ProtoResError {
+	uint8_t code;
+} ProtoResError;
+
+
+typedef struct _ProtoResGetInfo {
 	struct {
 		uint8_t  major;
 		uint8_t  minor;
-		uint16_t payloadSize;
 	} version;
-} ProtocolResponseGetInfo;
+
+	uint16_t payloadSize;
+} ProtoResGetInfo;
 
 
-typedef struct _ProtocolResponse {
+typedef struct _ProtoRes {
+	uint8_t cmd;
 	uint8_t id;
 
 	union {
-		ProtocolResponseGetInfo getInfo;
+		ProtoResError   error;
+		ProtoResGetInfo getInfo;
 	} response;
-} ProtocolResponse;
+} ProtoRes;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* COMMON_PROTOCOL_RESPONSE_H_ */

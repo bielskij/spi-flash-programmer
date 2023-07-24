@@ -8,13 +8,11 @@
 #ifndef FIRMWARE_INCLUDE_PROTOCOL_H_
 #define FIRMWARE_INCLUDE_PROTOCOL_H_
 
-#include <string>
-
 #define PROTO_VERSION_MAJOR 1
 #define PROTO_VERSION_MINOR 0
 
 /*
- * CRC8 start va;ue and polynomial definition.
+ * CRC8 start value and polynomial definition.
  */
 #define PROTO_CRC8_POLY  0xAB
 #define PROTO_CRC8_START 0x00
@@ -86,16 +84,14 @@
  * It is not a real command. This value is reserved by protocol deserializer to
  * inform about processing error occurrence.
  */
-#define PROTO_CMD_ERROR 0xff
+#define PROTO_CMD_ERROR 0xf
 
 /*
  * Error codes.
  */
 #define PROTO_NO_ERROR                0x00
-#define PROTO_ERROR_INVALID_SYNC_BYTE 0x01
-#define PROTO_ERROR_INVALID_CMD       0x02
-#define PROTO_ERROR_TIMEOUT           0x03
-#define PROTO_ERROR_INVALID_LENGTH    0x04
-#define PROTO_ERROR_INVALID_CRC       0x05
+#define PROTO_ERROR_INVALID_CMD       0x01
+#define PROTO_ERROR_INVALID_LENGTH    0x02
+#define PROTO_ERROR_INVALID_CRC       0x03
 
 #endif /* FIRMWARE_INCLUDE_PROTOCOL_H_ */

@@ -1,16 +1,12 @@
-/*
- * request.c
- *
- *  Created on: 23 lip 2023
- *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
- */
 #include <stdlib.h>
+#include <string.h>
 
 #include "common/protocol.h"
-#include "common/protocol/deserializer/request.h"
+#include "common/protocol/packet.h"
+#include "common/crc8.h"
 
+#include "common.h"
 
-#define CRC_UNKNOWN 0
 #define CMD_UNKNOWN 0
 #define ID_UNKNOWN  0
 
@@ -27,45 +23,48 @@ typedef enum _State {
 } State;
 
 
-uint8_t proto_int_val_length_estimate(uint16_t val) {
-	if (val > 127) {
-		return 2;
-	}
+uint16_t proto_pkt_ser(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize) {
+	uint16_t ret = 0;
 
-	return 1;
+	do {
+		if (bufferSize < 3 + proto_int_val_length_estimate(pkt->payloadSize) + pkt->payloadSize) {
+			break;
+		}
+
+		buffer[ret++] = PROTO_SYNC_NIBBLE | pkt->code;
+		buffer[ret++] = pkt->id;
+
+		ret += proto_int_val_encode(pkt->payloadSize, buffer + ret);
+
+		if (pkt->payloadSize) {
+			memcpy(buffer + ret, pkt->payload, pkt->payloadSize);
+
+			ret += pkt->payloadSize;
+		}
+
+		buffer[ret++] = crc8_get(buffer, ret, PROTO_CRC8_POLY, PROTO_CRC8_START);
+	} while (0);
+
+	return ret;
 }
 
 
-uint8_t proto_int_val_length_probe(uint8_t byte) {
-	if (byte & 0x80) {
-		return 2;
-	}
+void proto_pkt_des_setup(ProtoPktDes *ctx, uint8_t *buffer, uint16_t bufferSize) {
+	ctx->mem     = buffer;
+	ctx->memSize = bufferSize;
 
-	return 1;
+	proto_pkt_des_reset(ctx);
 }
 
 
-uint16_t proto_int_val_decode(uint8_t val[2]) {
-	return ((uint16_t)(val[0] & 0x7f) << 8) | val[1];
-}
-
-
-void PRQD_setup(PRQDContext *ctx, void *mem, uint16_t memSize) {
-	ctx->mem     = mem;
-	ctx->memSize = memSize;
-
-	PRQD_reset(ctx);
-}
-
-
-uint8_t PRQD_putByte(PRQDContext *ctx, uint8_t byte, PRQ *request) {
+uint8_t proto_pkt_des_putByte(ProtoPktDes *ctx, uint8_t byte, ProtoPkt *request) {
 	uint8_t error = PROTO_NO_ERROR;
 
 	switch (ctx->state) {
 		case STATE_WAIT_SYNC:
 			{
 				if ((byte & PROTO_SYNC_NIBBLE_MASK) == PROTO_SYNC_NIBBLE) {
-					ctx->cmd   = PROTO_CMD_NIBBLE_MASK & byte;
+					ctx->code   = PROTO_CMD_NIBBLE_MASK & byte;
 					ctx->state = STATE_ID;
 					ctx->crc   = crc8_getForByte(byte, PROTO_CRC8_POLY, PROTO_CRC8_START);
 				}
@@ -129,24 +128,21 @@ uint8_t PRQD_putByte(PRQDContext *ctx, uint8_t byte, PRQ *request) {
 		case STATE_CRC:
 			{
 				if (ctx->crc != byte) {
-					_response(PROTO_ERROR_INVALID_CRC, NULL, 0);
+					error = PROTO_ERROR_INVALID_CRC;
 
 				} else {
-					ctx->state = STATE_CMD_RDY;
+					request->code = ctx->code;
+					request->id   = ctx->id;
 
-					switch (ctx->cmd) {
-						case PROTO_CMD_GET_INFO:
-							{
-								request->cmd = ctx->cmd;
-							}
-							break;
+					request->payloadSize = ctx->dataSize;
+					if (request->payloadSize) {
+						request->payload = ctx->mem;
 
-						default:
-							{
-								error = PROTO_ERROR_INVALID_CMD;
-							}
-							break;
+					} else {
+						request->payload = NULL;
 					}
+
+					ctx->state = STATE_CMD_RDY;
 				}
 			}
 			break;
@@ -162,22 +158,17 @@ uint8_t PRQD_putByte(PRQDContext *ctx, uint8_t byte, PRQ *request) {
 	}
 
 	{
-		uint8_t ret = PRQD_RET_IDLE;
+		uint8_t ret = PROTO_PKT_DES_RET_IDLE;
 
 		if (error != PROTO_NO_ERROR) {
-			request->cmd = PROTO_CMD_ERROR;
-			request->id  = ctx->id;
-
-			request->request.error.code = error;
-
-			ret = PRQD_RET_SET_ERROR_CODE(error);
+			ret = PROTO_PKT_DES_RET_SET_ERROR_CODE(error);
 
 		} else if (ctx->state == STATE_CMD_RDY) {
-			ret = PRQD_RET_SET_ERROR_CODE(error);
+			ret = PROTO_PKT_DES_RET_SET_ERROR_CODE(error);
 		}
 
-		if (ret != PRQD_RET_IDLE) {
-			PRQD_reset(ctx);
+		if (ret != PROTO_PKT_DES_RET_IDLE) {
+			proto_pkt_des_reset(ctx);
 		}
 
 		return ret;
@@ -185,11 +176,11 @@ uint8_t PRQD_putByte(PRQDContext *ctx, uint8_t byte, PRQ *request) {
 }
 
 
-void PRQD_reset(PRQDContext *ctx) {
+void proto_pkt_des_reset(ProtoPktDes *ctx) {
 	ctx->state    = STATE_WAIT_SYNC;
-	ctx->crc      = CRC_UNKNOWN;
+	ctx->crc      = PROTO_CRC8_START;
 	ctx->id       = ID_UNKNOWN;
-	ctx->cmd      = CMD_UNKNOWN;
+	ctx->code     = CMD_UNKNOWN;
 	ctx->dataRead = 0;
 	ctx->dataSize = 0;
 }

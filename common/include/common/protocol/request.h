@@ -10,25 +10,26 @@
 
 #include <stdint.h>
 
-typedef struct _PRQGetInfo {
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-} PRQGetInfo;
+typedef struct _ProtoReqGetInfo {
+
+} ProtoReqGetInfo;
 
 
-typedef struct _PRQDError {
-	uint8_t code;
-} PRQDError;
-
-
-typedef struct _PRQ {
+typedef struct _ProtoReq {
 	uint8_t cmd;
 	uint8_t id;
 
 	union {
-		PRQGetInfo getInfo;
-		PRQDError  error;
+		ProtoReqGetInfo getInfo;
 	} request;
-} PRQ;
+} ProtoReq;
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* COMMON_PROTOCOL_REQUEST_H_ */
