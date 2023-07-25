@@ -32,16 +32,25 @@ typedef struct _ProtoResGetInfo {
 } ProtoResGetInfo;
 
 
+typedef struct _ProtoResTransfer {
+	uint8_t *rxData;
+	uint16_t rxDataSize;
+} ProtoResTransfer;
+
+
 typedef struct _ProtoRes {
 	uint8_t cmd;
 	uint8_t id;
 
 	union {
-		ProtoResError   error;
-		ProtoResGetInfo getInfo;
+		ProtoResError    error;
+		ProtoResGetInfo  getInfo;
+		ProtoResTransfer transfer;
 	} response;
 } ProtoRes;
 
+
+void proto_res_init(ProtoRes *response, uint8_t cmd, uint8_t id);
 
 bool proto_res_dec(ProtoRes *request, ProtoPkt *pkt);
 

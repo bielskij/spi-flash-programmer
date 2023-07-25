@@ -52,8 +52,7 @@
  *
  * This commands returns the following information:
  *  - protocol version
- *  - HW name
- *  - maximal payload size
+ *  - maximal payload size supported by protocol packet
  *
  * Request payload:
  *  - No payload
@@ -64,21 +63,18 @@
  */
 #define PROTO_CMD_GET_INFO     0x0
 
+
+#define PROTO_SPI_TRANSFER_FLAG_KEEP_CS (1 << 0)
+
 /*
  * 3) CMD_SPI_TRANSFER
  *
- * Do SPI data transfer.
- *
- * [ 1B  ][     1/2B    ][  1/2B   ][     1/2B    ][  1/2B   ][     TX_SIZE    ][     RX_SIZE    ]
- * [FLAGS][ TX_SKP_VLEN ][ TX_VLEN ][ RX_SKP_VLEN ][ RX_VLEN ][ TX_DATA ][ ... ][ RX_DATA ][ ... ]
- *
- * Flags:
- *  0000 0001 - has TX (TX_SKP_VLEN, TX_VLEN, TX_DATA omitted if the flag is not set)
- *  0000 0010 - has RX (RX_SKP_VLEN, RX_VLEN, RX_DATA omitted if the flag is not set)
- *  0000 0100 - Assert CS at the beginning
- *  0000 1000 - Release CS at the end
+ * [  1B   ][  1/2B   ][    TX_SIZE     ][     1/2B     ][  1/2B   ]
+ * [ FLAGS ][ TX_SIZE ][ TX_DATA ][ ... ][ RX_SKIP_SIZE ][ RX_SIZE ]
  */
-//#define PROTO_CMD_SPI_TRANSFER 0x01
+#define PROTO_CMD_SPI_TRANSFER 0x1
+
+
 
 /*
  * It is not a real command. This value is reserved by protocol deserializer to

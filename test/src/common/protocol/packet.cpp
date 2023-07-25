@@ -20,14 +20,17 @@ TEST(common_protocol, packet_no_payload) {
 	size_t  txBufferWritten;
 
 	{
-		ProtoPkt req;
+		ProtoPkt pkt;
 
-		req.code        = PROTO_CMD_GET_INFO;
-		req.id          = 0x12;
-		req.payload     = NULL;
-		req.payloadSize = 0;
+		proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), 0);
 
-		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
+		ASSERT_EQ(pkt.payload,     nullptr);
+		ASSERT_EQ(pkt.payloadSize, 0);
+
+		pkt.code = PROTO_CMD_GET_INFO;
+		pkt.id   = 0x12;
+
+		txBufferWritten = proto_pkt_encode(&pkt);
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -65,16 +68,21 @@ TEST(common_protocol, packet_short_payload) {
 	size_t  txBufferWritten;
 
 	{
-		ProtoPkt req;
+		ProtoPkt pkt;
 
 		std::string payload = STRING_PAYLOAD_SHORT;
 
-		req.code        = PROTO_CMD_GET_INFO;
-		req.id          = 0x12;
-		req.payload     = payload.data();
-		req.payloadSize = payload.length();
+		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), payload.size()));
 
-		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
+		ASSERT_NE(pkt.payload,     nullptr);
+		ASSERT_NE(pkt.payloadSize, 0);
+
+		pkt.code = PROTO_CMD_GET_INFO;
+		pkt.id   = 0x12;
+
+		memcpy(pkt.payload, payload.data(), payload.length());
+
+		txBufferWritten = proto_pkt_encode(&pkt);
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -111,16 +119,21 @@ TEST(common_protocol, packet_long_payload) {
 	size_t  txBufferWritten;
 
 	{
-		ProtoPkt req;
+		ProtoPkt pkt;
 
 		std::string payload = STRING_PAYLOAD_LONG;
 
-		req.code        = PROTO_CMD_GET_INFO;
-		req.id          = 0x12;
-		req.payload     = payload.data();
-		req.payloadSize = payload.length();
+		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), payload.size()));
 
-		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
+		ASSERT_NE(pkt.payload,     nullptr);
+		ASSERT_NE(pkt.payloadSize, 0);
+
+		pkt.code = PROTO_CMD_GET_INFO;
+		pkt.id   = 0x12;
+
+		memcpy(pkt.payload, payload.data(), payload.length());
+
+		txBufferWritten = proto_pkt_encode(&pkt);
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -158,18 +171,18 @@ TEST(common_protocol, packet_error_payload_too_long) {
 
 	// Request bigger than memory buffer
 	{
-		ProtoPkt req;
+		ProtoPkt pkt;
 
-		req.code        = PROTO_CMD_GET_INFO;
-		req.id          = 0x12;
-		req.payload     = txBuffer;
-		req.payloadSize = sizeof(txBuffer) - 1;
+		pkt.code = PROTO_CMD_GET_INFO;
+		pkt.id   = 0x12;
 
-		ASSERT_EQ(proto_pkt_enc(&req, txBuffer, sizeof(txBuffer)), 0);
+		ASSERT_FALSE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), sizeof(txBuffer) - 1));
 
-		req.payloadSize = sizeof(txBuffer) - PROTO_FRAME_MIN_SIZE;
+		ASSERT_TRUE (proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), sizeof(txBuffer) - PROTO_FRAME_MIN_SIZE));
 
-		ASSERT_NE(proto_pkt_enc(&req, txBuffer, sizeof(txBuffer)), 0);
+		txBufferWritten = proto_pkt_encode(&pkt);
+
+		ASSERT_GT(txBufferWritten, 0);
 	}
 
 	{
@@ -201,16 +214,20 @@ TEST(common_protocol, packet_error_invalid_crc) {
 	uint8_t txBuffer[MEM_SIZE] = { 0 };
 	size_t  txBufferWritten;
 
-	// Request bigger than memory buffer
 	{
-		ProtoPkt req;
+		ProtoPkt pkt;
 
-		req.code        = PROTO_CMD_GET_INFO;
-		req.id          = 0x12;
-		req.payload     = NULL;
-		req.payloadSize = 0;
+		proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), 0);
 
-		txBufferWritten = proto_pkt_enc(&req, txBuffer, sizeof(txBuffer));
+		ASSERT_EQ(pkt.payload,     nullptr);
+		ASSERT_EQ(pkt.payloadSize, 0);
+
+		pkt.code = PROTO_CMD_GET_INFO;
+		pkt.id   = 0x12;
+
+		txBufferWritten = proto_pkt_encode(&pkt);
+
+		ASSERT_GT(txBufferWritten, 0);
 
 		txBuffer[txBufferWritten - 1] = 0xff;
 	}

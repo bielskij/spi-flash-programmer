@@ -6,6 +6,12 @@
 #include "common.h"
 
 
+void proto_res_init(ProtoRes *response, uint8_t cmd, uint8_t id) {
+	response->cmd = cmd;
+	response->id  = id;
+}
+
+
 bool proto_res_dec(ProtoRes *request, ProtoPkt *pkt) {
 	bool ret = true;
 

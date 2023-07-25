@@ -9,6 +9,7 @@
 #define COMMON_PROTOCOL_PACKET_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,10 +20,14 @@ extern "C" {
 #define PROTO_PKT_DES_RET_SET_ERROR_CODE(_v)((_v) | 0x80)
 
 typedef struct _ProtoPkt {
-	uint8_t        code;
-	uint8_t        id;
-	const void    *payload;
-	uint16_t       payloadSize;
+	uint8_t    code;
+	uint8_t    id;
+
+	uint8_t   *payload;
+	uint16_t   payloadSize;
+
+	uint8_t   *mem;
+	uint16_t   memSize;
 } ProtoPkt;
 
 
@@ -41,7 +46,9 @@ typedef struct _ProtoPktDesCtx {
 } ProtoPktDes;
 
 
-uint16_t proto_pkt_enc(ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize);
+bool proto_pkt_init(ProtoPkt *pkt, uint8_t *mem, uint16_t memSize, uint16_t payloadSize);
+
+uint16_t proto_pkt_encode(ProtoPkt *pkt);
 
 void proto_pkt_dec_setup(ProtoPktDes *ctx, uint8_t *buffer, uint16_t bufferSize);
 

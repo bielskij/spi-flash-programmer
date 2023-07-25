@@ -11,8 +11,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "common/protocol/packet.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,19 +20,38 @@ typedef struct _ProtoReqGetInfo {
 } ProtoReqGetInfo;
 
 
+typedef struct _ProtoReqTransfer {
+	uint8_t *txBuffer;
+	uint16_t txBufferSize;
+
+	uint8_t *rxBuffer;
+	uint16_t rxBufferSize;
+
+	uint16_t rxSkipSize;
+
+	uint8_t flags;
+} ProtoReqTransfer;
+
+
 typedef struct _ProtoReq {
 	uint8_t cmd;
 	uint8_t id;
 
 	union {
-		ProtoReqGetInfo getInfo;
+		ProtoReqGetInfo  getInfo;
+		ProtoReqTransfer transfer;
 	} request;
 } ProtoReq;
 
 
-bool proto_req_dec(ProtoReq *request, ProtoPkt *pkt);
+void proto_req_init(ProtoReq *request, uint8_t cmd, uint8_t id);
 
-bool proto_req_enc(ProtoReq *request, ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize);
+uint16_t proto_req_getPayloadSize(ProtoReq *request);
+
+void proto_req_assign(ProtoReq *request, uint8_t *memory, uint16_t memorySize, bool decode);
+
+uint16_t proto_req_encode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
+uint16_t proto_req_decode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
 
 #ifdef __cplusplus
 }
