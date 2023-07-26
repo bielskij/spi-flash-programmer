@@ -33,8 +33,8 @@ typedef struct _ProtoResGetInfo {
 
 
 typedef struct _ProtoResTransfer {
-	uint8_t *rxData;
-	uint16_t rxDataSize;
+	uint8_t *rxBuffer;
+	uint16_t rxBufferSize;
 } ProtoResTransfer;
 
 
@@ -50,11 +50,12 @@ typedef struct _ProtoRes {
 } ProtoRes;
 
 
-void proto_res_init(ProtoRes *response, uint8_t cmd, uint8_t id);
+void     proto_res_init  (ProtoRes *response, uint8_t cmd, uint8_t id);
+void     proto_res_assign(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize, bool decode);
+uint16_t proto_res_encode(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize);
+uint16_t proto_res_decode(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize);
 
-bool proto_res_dec(ProtoRes *request, ProtoPkt *pkt);
-
-bool proto_res_enc(ProtoRes *request, ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize);
+uint16_t proto_res_getPayloadSize(ProtoRes *response);
 
 #ifdef __cplusplus
 }

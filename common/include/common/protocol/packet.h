@@ -46,7 +46,7 @@ typedef struct _ProtoPktDesCtx {
 } ProtoPktDes;
 
 
-bool proto_pkt_init(ProtoPkt *pkt, uint8_t *mem, uint16_t memSize, uint16_t payloadSize);
+bool proto_pkt_init(ProtoPkt *pkt, uint8_t *mem, uint16_t memSize, uint8_t code, uint8_t id, uint16_t payloadSize);
 
 uint16_t proto_pkt_encode(ProtoPkt *pkt);
 

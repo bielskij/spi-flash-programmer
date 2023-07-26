@@ -3,6 +3,8 @@
 #include "common/protocol.h"
 #include "common/protocol/request.h"
 
+#include "common.h"
+
 
 void proto_req_init(ProtoReq *request, uint8_t cmd, uint8_t id) {
 	request->cmd = cmd;

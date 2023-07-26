@@ -23,7 +23,7 @@ TEST(common_protocol, request_getInfo) {
 		req.request.transfer.rxBufferSize = 12;
 		req.request.transfer.rxSkipSize   = 2;
 
-		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), proto_req_getPayloadSize(&req)));
+		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), req.cmd, req.id, proto_req_getPayloadSize(&req)));
 		{
 			proto_req_assign(&req, pkt.payload, pkt.payloadSize, false);
 			{
@@ -32,7 +32,7 @@ TEST(common_protocol, request_getInfo) {
 				t.txBuffer[0] = 0x10;
 				t.txBuffer[1] = 0x20;
 			}
-			proto_req_encode(&req, pkt.payload, pkt.payloadSize);
+			ASSERT_EQ(proto_req_encode(&req, pkt.payload, pkt.payloadSize), pkt.payloadSize);
 
 			txBufferWritten = proto_pkt_encode(&pkt);
 		}
@@ -45,7 +45,8 @@ TEST(common_protocol, request_getInfo) {
 
 		proto_pkt_dec_setup(&decoder, rxBuffer, sizeof(rxBuffer));
 
-		for (uint16_t i = 0; i < txBufferWritten; i++) {
+		uint16_t i;
+		for (i = 0; i < txBufferWritten; i++) {
 			auto ret = proto_pkt_dec_putByte(&decoder, txBuffer[i], &pkt);
 
 			if (ret != PROTO_PKT_DES_RET_IDLE) {
@@ -65,8 +66,10 @@ TEST(common_protocol, request_getInfo) {
 
 				ASSERT_EQ(req.cmd, PROTO_CMD_SPI_TRANSFER);
 				ASSERT_EQ(req.id,  0x45);
+				break;
 			}
 		}
 
+		ASSERT_NE(i, txBufferWritten);
 	}
 }

@@ -12,75 +12,118 @@ void proto_res_init(ProtoRes *response, uint8_t cmd, uint8_t id) {
 }
 
 
-bool proto_res_dec(ProtoRes *request, ProtoPkt *pkt) {
-	bool ret = true;
+uint16_t proto_res_getPayloadSize(ProtoRes *response) {
+	uint16_t ret = 0;
 
-	{
-		uint8_t *payload = (uint8_t *) pkt->payload;
+	switch (response->cmd) {
+		case PROTO_CMD_GET_INFO:
+			{
+				ret = 1 + proto_int_val_length_estimate(response->response.getInfo.payloadSize);
+			}
+			break;
 
-		request->cmd = pkt->code;
-		request->id  = pkt->id;
+		case PROTO_CMD_SPI_TRANSFER:
+			{
+				ProtoResTransfer *t = &response->response.transfer;
 
-		switch (request->cmd) {
-			case PROTO_CMD_GET_INFO:
-				{
-					ProtoResGetInfo *info = &request->response.getInfo;
+				ret = proto_int_val_length_estimate(t->rxBufferSize) + t->rxBufferSize;
+			}
+			break;
 
-					if (pkt->payloadSize < 3) {
-						ret = false;
-						break;
-					}
-
-					info->version.major = payload[0] >> 4;
-					info->version.minor = payload[0] & 0x0f;
-					info->payloadSize   = proto_int_val_decode(payload + 1);
-				}
-				break;
-
-			default:
-				break;
-		}
+		default:
+			ret = false;
 	}
 
 	return ret;
 }
 
 
-bool proto_res_enc(ProtoRes *request, ProtoPkt *pkt, uint8_t *buffer, uint16_t bufferSize) {
-	bool ret = true;
+void proto_res_assign(ProtoRes *response, uint8_t *memory, uint16_t memorySize, bool decode) {
+	switch (response->cmd) {
+		case PROTO_CMD_GET_INFO:
+			{
+			}
+			break;
 
-	{
-		uint16_t ret = 0;
+		case PROTO_CMD_SPI_TRANSFER:
+			{
+				ProtoResTransfer *t = &response->response.transfer;
 
-		pkt->code = request->cmd;
-		pkt->id   = request->id;
+				if (t->rxBufferSize) {
+					t->rxBuffer = memory + proto_int_val_length_estimate(t->rxBufferSize);
 
-		switch (request->cmd) {
-			case PROTO_CMD_GET_INFO:
-				{
-					if (bufferSize < 3) {
-						ret = false;
-						break;
-					}
-
-					buffer[ret++] = (request->response.getInfo.version.major << 4) | request->response.getInfo.version.minor;
-
-					ret += proto_int_val_encode(request->response.getInfo.payloadSize, buffer + ret);
+				} else {
+					t->rxBuffer = NULL;
 				}
-				break;
+			}
+			break;
 
-			default:
-				break;
-		}
+		default:
+			{
 
-		if (ret) {
-			pkt->payload     = buffer;
-			pkt->payloadSize = ret;
+			}
+			break;
+	}
+}
 
-		} else {
-			pkt->payload     = NULL;
-			pkt->payloadSize = 0;
-		}
+
+uint16_t proto_res_encode(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize) {
+	uint16_t ret = 0;
+
+	switch (response->cmd) {
+		case PROTO_CMD_GET_INFO:
+			{
+				ProtoResGetInfo *info = &response->response.getInfo;
+
+				buffer[ret++] = (info->version.major << 4) | (info->version.minor & 0x0f);
+
+				ret += proto_int_val_encode(info->payloadSize, buffer + ret);
+			}
+			break;
+
+		case PROTO_CMD_SPI_TRANSFER:
+			{
+				ProtoResTransfer *t = &response->response.transfer;
+
+				ret += proto_int_val_encode(t->rxBufferSize, buffer + ret);
+			}
+			break;
+
+		default:
+			break;
+	}
+
+	return ret;
+}
+
+
+uint16_t proto_res_decode(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize) {
+	uint16_t ret = 0;
+
+	switch (response->cmd) {
+		case PROTO_CMD_GET_INFO:
+			{
+				ProtoResGetInfo *info = &response->response.getInfo;
+
+				info->version.major = buffer[ret] >> 4;
+				info->version.minor = buffer[ret++] & 0x0f;
+				info->payloadSize   = proto_int_val_decode(buffer + ret);
+
+				ret += proto_int_val_length_estimate(info->payloadSize);
+			}
+			break;
+
+		case PROTO_CMD_SPI_TRANSFER:
+			{
+				ProtoResTransfer *t = &response->response.transfer;
+
+				t->rxBuffer     = NULL;
+				t->rxBufferSize = proto_int_val_decode(buffer);
+			}
+			break;
+
+		default:
+			break;
 	}
 
 	return ret;

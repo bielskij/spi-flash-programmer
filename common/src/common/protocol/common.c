@@ -20,7 +20,13 @@ uint8_t proto_int_val_length_probe(uint8_t byte) {
 
 
 uint16_t proto_int_val_decode(uint8_t val[2]) {
-	return ((uint16_t)(val[0] & 0x7f) << 8) | val[1];
+	uint16_t ret = val[0];
+
+	if (proto_int_val_length_probe(ret) == 2) {
+		ret = ((uint16_t)(ret & 0x7f) << 8) | val[1];
+	}
+
+	return ret;
 }
 
 

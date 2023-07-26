@@ -23,19 +23,19 @@ typedef enum _State {
 } State;
 
 
-bool proto_pkt_init(ProtoPkt *pkt, uint8_t *mem, uint16_t memSize, uint16_t payloadSize) {
+bool proto_pkt_init(ProtoPkt *pkt, uint8_t *mem, uint16_t memSize, uint8_t code, uint8_t id, uint16_t payloadSize) {
 	bool ret = (mem != NULL) && (memSize > 0);
 
 	if (ret) {
-		pkt->code = CMD_UNKNOWN;
-		pkt->id   = ID_UNKNOWN;
+		pkt->code = code;
+		pkt->id   = id;
 
 		pkt->mem     = mem;
 		pkt->memSize = memSize;
 
 		pkt->payloadSize = payloadSize;
 		if (pkt->payloadSize) {
-			pkt->payload = pkt->mem + proto_int_val_length_estimate(payloadSize);
+			pkt->payload = pkt->mem + 2 + proto_int_val_length_estimate(payloadSize);
 
 		} else {
 			pkt->payload = NULL;
@@ -54,11 +54,16 @@ uint16_t proto_pkt_encode(ProtoPkt *pkt) {
 	uint16_t ret = 0;
 
 	do {
+		pkt->mem[ret++] = PROTO_SYNC_NIBBLE | pkt->code;
+		pkt->mem[ret++] = pkt->id;
+
+		proto_int_val_encode(pkt->payloadSize, pkt->mem + ret);
+
 		if (pkt->payload) {
 			ret = (pkt->payload - pkt->mem) + pkt->payloadSize + 1;
 
 		} else {
-			ret = 4;
+			ret = 2 + 1 + 1;
 		}
 
 		pkt->mem[ret - 1] = crc8_get(pkt->mem, ret - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
