@@ -74,14 +74,6 @@
  */
 #define PROTO_CMD_SPI_TRANSFER 0x1
 
-
-
-/*
- * It is not a real command. This value is reserved by protocol deserializer to
- * inform about processing error occurrence.
- */
-#define PROTO_CMD_ERROR 0xf
-
 /*
  * Error codes.
  */

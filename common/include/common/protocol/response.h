@@ -40,18 +40,18 @@ typedef struct _ProtoResTransfer {
 
 typedef struct _ProtoRes {
 	uint8_t cmd;
+	uint8_t code;
 	uint8_t id;
 
 	union {
-		ProtoResError    error;
 		ProtoResGetInfo  getInfo;
 		ProtoResTransfer transfer;
 	} response;
 } ProtoRes;
 
 
-void     proto_res_init  (ProtoRes *response, uint8_t cmd, uint8_t id);
-void     proto_res_assign(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize, bool decode);
+void     proto_res_init  (ProtoRes *response, uint8_t cmd, uint8_t code, uint8_t id);
+void     proto_res_assign(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize);
 uint16_t proto_res_encode(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize);
 uint16_t proto_res_decode(ProtoRes *response, uint8_t *buffer, uint16_t bufferSize);
 

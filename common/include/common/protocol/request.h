@@ -45,7 +45,7 @@ typedef struct _ProtoReq {
 
 
 void     proto_req_init  (ProtoReq *request, uint8_t cmd, uint8_t id);
-void     proto_req_assign(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize, bool decode);
+void     proto_req_assign(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
 uint16_t proto_req_encode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
 uint16_t proto_req_decode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
 

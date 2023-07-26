@@ -42,7 +42,7 @@ uint16_t proto_req_getPayloadSize(ProtoReq *request) {
 }
 
 
-void proto_req_assign(ProtoReq *request, uint8_t *memory, uint16_t memorySize, bool decode) {
+void proto_req_assign(ProtoReq *request, uint8_t *memory, uint16_t memorySize) {
 	switch (request->cmd) {
 		case PROTO_CMD_GET_INFO:
 			{
@@ -53,25 +53,11 @@ void proto_req_assign(ProtoReq *request, uint8_t *memory, uint16_t memorySize, b
 			{
 				ProtoReqTransfer *t = &request->request.transfer;
 
-				if (decode) {
-					if (t->rxBufferSize) {
-						t->rxBuffer = memory + proto_int_val_length_estimate(t->rxBufferSize);
-
-					} else {
-						t->rxBuffer = NULL;
-					}
-
-					t->txBuffer = NULL;
+				if (t->txBufferSize) {
+					t->txBuffer = memory + (1 + proto_int_val_length_estimate(t->txBufferSize));
 
 				} else {
-					if (t->txBufferSize) {
-						t->txBuffer = memory + (1 + proto_int_val_length_estimate(t->txBufferSize));
-
-					} else {
-						t->txBuffer = NULL;
-					}
-
-					t->rxBuffer = NULL;
+					t->txBuffer = NULL;
 				}
 			}
 			break;
@@ -121,7 +107,7 @@ uint16_t proto_req_encode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSiz
 
 
 uint16_t proto_req_decode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize) {
-	uint16_t ret = true;
+	uint16_t ret = 0;
 
 	switch (request->cmd) {
 		case PROTO_CMD_GET_INFO:
@@ -133,17 +119,20 @@ uint16_t proto_req_decode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSiz
 			{
 				ProtoReqTransfer *t = &request->request.transfer;
 
-				t->flags        = 0;
+				t->flags        = buffer[ret++];
 				t->txBuffer     = NULL;
-				t->txBufferSize = 0;
-				t->rxSkipSize   = 0;
+				t->txBufferSize = proto_int_val_decode(buffer + ret); ret += proto_int_val_length_estimate(t->txBufferSize);
+
+				ret += t->txBufferSize;
+
+				t->rxSkipSize   = proto_int_val_decode(buffer + ret); ret += proto_int_val_length_estimate(t->rxSkipSize);;
 				t->rxBuffer     = NULL;
-				t->rxBufferSize = proto_int_val_decode(buffer);
+				t->rxBufferSize = proto_int_val_decode(buffer + ret); ret += proto_int_val_length_estimate(t->rxBufferSize);
 			}
 			break;
 
 		default:
-			ret = false;
+			break;
 	}
 
 	return ret;

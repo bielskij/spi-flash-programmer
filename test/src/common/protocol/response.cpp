@@ -5,7 +5,36 @@
 #include "common/protocol/packet.h"
 
 
-TEST(common_protocol, response_getInfo) {
+struct ResponseTestParameters {
+	ResponseTestParameters(
+		uint8_t cmd, uint8_t code, uint8_t id,
+		std::function<void(ProtoRes &)> prepareRes,
+		std::function<void(ProtoRes &)> fillRes,
+		std::function<void(ProtoRes &)> validateRes
+	) {
+		this->cmd         = cmd;
+		this->code        = code;
+		this->id          = id;
+		this->prepareRes  = prepareRes;
+		this->fillRes     = fillRes;
+		this->validateRes = validateRes;
+	}
+
+	uint8_t cmd;
+	uint8_t code;
+	uint8_t id;
+
+	std::function<void(ProtoRes &)> prepareRes;
+	std::function<void(ProtoRes &)> fillRes;
+	std::function<void(ProtoRes &)> validateRes;
+};
+
+
+class ResponseTestWithParameter : public testing::TestWithParam<ResponseTestParameters> {
+};
+
+
+TEST_P(ResponseTestWithParameter, common_protocol_response) {
 	uint8_t  txBuffer[1024];
 	uint16_t txBufferWritten;
 	uint8_t  rxBuffer[1024];
@@ -15,17 +44,21 @@ TEST(common_protocol, response_getInfo) {
 	{
 		ProtoRes res;
 
-		proto_res_init(&res, PROTO_CMD_GET_INFO, 0x87);
+		proto_res_init(&res, GetParam().cmd, GetParam().code, GetParam().id);
 
-		res.response.getInfo.payloadSize   = 1024;
-		res.response.getInfo.version.major = 1;
-		res.response.getInfo.version.minor = 2;
+		std::cout << "Testing command: " << std::to_string(GetParam().cmd) << ", code: " << std::to_string(GetParam().code) << std::endl;
 
-		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), res.cmd, res.id, proto_res_getPayloadSize(&res)));
+		if (GetParam().prepareRes) {
+			GetParam().prepareRes(res);
+		}
+
+		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), res.code, res.id, proto_res_getPayloadSize(&res)));
 		{
-			proto_res_assign(&res, pkt.payload, pkt.payloadSize, false);
+			proto_res_assign(&res, pkt.payload, pkt.payloadSize);
 			{
-
+				if (GetParam().fillRes) {
+					GetParam().fillRes(res);
+				}
 			}
 			ASSERT_EQ(proto_res_encode(&res, pkt.payload, pkt.payloadSize), pkt.payloadSize);
 
@@ -49,22 +82,32 @@ TEST(common_protocol, response_getInfo) {
 
 				ASSERT_EQ(PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), PROTO_NO_ERROR);
 
-				ASSERT_EQ(pkt.code, PROTO_CMD_GET_INFO);
-				ASSERT_EQ(pkt.id,   0x87);
+				ASSERT_EQ(pkt.code, GetParam().code);
+				ASSERT_EQ(pkt.id,   GetParam().id);
 
-				ASSERT_NE(pkt.payload,     nullptr);
-				ASSERT_NE(pkt.payloadSize, 0);
+				proto_res_init(&res, GetParam().cmd, pkt.code, pkt.id);
 
-				proto_res_init  (&res, pkt.code, pkt.id);
-				proto_res_decode(&res, pkt.payload, pkt.payloadSize);
-				proto_res_assign(&res, pkt.payload, pkt.payloadSize, true);
+				if (proto_res_getPayloadSize(&res)) {
+					ASSERT_NE(pkt.payload,     nullptr);
+					ASSERT_NE(pkt.payloadSize, 0);
 
-				ASSERT_EQ(res.cmd, PROTO_CMD_GET_INFO);
-				ASSERT_EQ(res.id,  0x87);
+					ASSERT_NE(proto_res_decode(&res, pkt.payload, pkt.payloadSize), 0);
 
-				ASSERT_EQ(res.response.getInfo.payloadSize, 1024);
-				ASSERT_EQ(res.response.getInfo.version.major, 1);
-				ASSERT_EQ(res.response.getInfo.version.minor, 2);
+				} else {
+					ASSERT_EQ(pkt.payload,     nullptr);
+					ASSERT_EQ(pkt.payloadSize, 0);
+
+					ASSERT_EQ(proto_res_decode(&res, pkt.payload, pkt.payloadSize), 0);
+				}
+
+				proto_res_assign(&res, pkt.payload, pkt.payloadSize);
+
+				ASSERT_EQ(res.cmd, GetParam().cmd);
+				ASSERT_EQ(res.id,  GetParam().id);
+
+				if (GetParam().validateRes) {
+					GetParam().validateRes(res);
+				}
 				break;
 			}
 		}
@@ -72,3 +115,52 @@ TEST(common_protocol, response_getInfo) {
 		ASSERT_NE(i, txBufferWritten);
 	}
 }
+
+
+INSTANTIATE_TEST_SUITE_P(common_protocol_response, ResponseTestWithParameter, testing::Values(
+	ResponseTestParameters(
+		PROTO_CMD_GET_INFO, PROTO_NO_ERROR, 0x45,
+
+		{},
+		{},
+		{}
+	),
+
+	ResponseTestParameters(
+		PROTO_CMD_SPI_TRANSFER, PROTO_NO_ERROR, 0x45,
+
+		[](ProtoRes &res) {
+			auto &t = res.response.transfer;
+
+			t.rxBufferSize = 12;
+		},
+
+		[](ProtoRes &res) {
+			auto &t = res.response.transfer;
+
+			t.rxBuffer[0] = 0x10;
+			t.rxBuffer[1] = 0x20;
+		},
+
+		[](ProtoRes &res) {
+			auto &t = res.response.transfer;
+
+			ASSERT_EQ(t.rxBufferSize,   12);
+
+			ASSERT_TRUE(t.rxBuffer != NULL);
+
+			ASSERT_EQ(t.rxBuffer[0], 0x10);
+			ASSERT_EQ(t.rxBuffer[1], 0x20);
+		}
+	),
+
+	ResponseTestParameters(
+		PROTO_CMD_GET_INFO, PROTO_ERROR_INVALID_CRC, 0x45,
+
+		{},
+		{},
+		[](ProtoRes &res) {
+			ASSERT_EQ(res.code, PROTO_ERROR_INVALID_CRC);
+		}
+	)
+));
