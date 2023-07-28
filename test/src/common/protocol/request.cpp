@@ -152,7 +152,6 @@ INSTANTIATE_TEST_SUITE_P(common_protocol_request, RequestTestWithParameter, test
 			ASSERT_EQ(t.rxBufferSize,   12);
 			ASSERT_EQ(t.rxSkipSize,      2);
 
-			ASSERT_TRUE(t.rxBuffer == NULL);
 			ASSERT_TRUE(t.txBuffer != NULL);
 
 			ASSERT_EQ(t.txBuffer[0], 0x10);

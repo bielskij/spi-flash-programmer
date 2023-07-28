@@ -24,9 +24,7 @@ typedef struct _ProtoReqTransfer {
 	uint8_t *txBuffer;
 	uint16_t txBufferSize;
 
-	uint8_t *rxBuffer;
 	uint16_t rxBufferSize;
-
 	uint16_t rxSkipSize;
 
 	uint8_t flags;

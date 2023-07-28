@@ -126,7 +126,6 @@ uint16_t proto_req_decode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSiz
 				ret += t->txBufferSize;
 
 				t->rxSkipSize   = proto_int_val_decode(buffer + ret); ret += proto_int_val_length_estimate(t->rxSkipSize);;
-				t->rxBuffer     = NULL;
 				t->rxBufferSize = proto_int_val_decode(buffer + ret); ret += proto_int_val_length_estimate(t->rxBufferSize);
 			}
 			break;

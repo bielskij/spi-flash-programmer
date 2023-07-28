@@ -26,6 +26,8 @@ add_executable(unit_tests
 	../common/src/common/protocol/request.c
 	../common/src/common/protocol/response.c
 	
+	../firmware/common/src/firmware/programmer.c
+	
 	${TEST_FILES}
 )
 
@@ -37,6 +39,7 @@ target_include_directories(unit_tests
 	PRIVATE
 		include
 		../common/include
+		../firmware/common/include
 )
 
 target_link_libraries(unit_tests
