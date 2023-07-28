@@ -40,7 +40,11 @@ APP_NAME := firmware
 # common src
 SRC := \
 	$(DIR_SRC)/main.c \
-	$(DIR_SRC)/../../../common/src/crc8.c \
+	$(DIR_SRC)/../../../common/src/common/crc8.c \
+	$(DIR_SRC)/../../../common/src/common/protocol/common.c \
+	$(DIR_SRC)/../../../common/src/common/protocol/packet.c \
+	$(DIR_SRC)/../../../common/src/common/protocol/request.c \
+	$(DIR_SRC)/../../../common/src/common/protocol/response.c \
 	$(DIR_SRC)/../../common/src/firmware/programmer.c
 	
 TMP := $(foreach file, $(SRC), $(shell echo $(file) | sed -e 's|$(DIR_SRC)\/|$(DIR_OUT)\/|'))

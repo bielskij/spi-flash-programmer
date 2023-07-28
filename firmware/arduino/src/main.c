@@ -8,6 +8,8 @@
 
 #include <avr/io.h>
 
+#include "common/protocol.h"
+
 #include "firmware/programmer.h"
 
 #ifndef NULL
@@ -99,6 +101,7 @@ uint8_t uart_get() {
 
 #define SPI_WAIT() { while (! (SPSR & _BV(SPIF))) {} }
 
+#define _max(x, y) ((x) < (y) ? (y) : (x))
 
 void spi_initialize() {
 	PIO_SET_OUTPUT(SPI_CS_BANK, SPI_CS_PIN);
@@ -116,75 +119,89 @@ void spi_initialize() {
 }
 
 
-static void _spiTransferCallback(void *buffer, uint16_t txSize, uint16_t rxSize, void *callbackData) {
-	uint16_t loopSize = txSize > rxSize ? txSize : rxSize;
+static void _programmerRequestCallback(ProtoReq *request, ProtoRes *response, void *callbackData) {
+	switch (request->cmd) {
+		case PROTO_CMD_SPI_TRANSFER:
+			{
+				ProtoReqTransfer *req = &request->request.transfer;
+				ProtoResTransfer *res = &response->response.transfer;
 
-	for (uint16_t i = 0; i < loopSize; i++) {
-		if (i < txSize) {
-			SPDR = ((uint8_t *)buffer)[i];
+				CS_LOW();
+				{
+					uint16_t toRecv = req->rxBufferSize;
 
-		} else {
-			SPDR = 0xff;
-		}
+					for (uint16_t i = 0; i < _max(req->txBufferSize, req->rxSkipSize + req->rxBufferSize); i++) {
+						if (i < req->txBufferSize) {
+							SPDR = req->txBuffer[i];
 
-		SPI_WAIT();
+						} else {
+							SPDR = 0xff;
+						}
 
-		if (i < rxSize) {
-			((uint8_t *)buffer)[i] = SPDR;
-		}
+						SPI_WAIT();
+
+						if (toRecv) {
+							if (i >= req->rxSkipSize) {
+								res->rxBuffer[i - req->rxSkipSize] = SPDR;
+
+								toRecv--;
+							}
+						}
+					}
+				}
+				if ((req->flags & PROTO_SPI_TRANSFER_FLAG_KEEP_CS) == 0) {
+					CS_HIGH();
+				}
+			}
+			break;
+
+		default:
+			break;
 	}
 }
 
 
-static void _spiCsCallback(bool assert, void *callbackData) {
-	if (assert) {
-		CS_LOW();
-
-	} else {
-		CS_HIGH();
+static void _programmerResponseCallback(uint8_t *buffer, uint16_t bufferSize, void *callbackData) {
+	for (uint16_t i = 0; i < bufferSize; i++) {
+		uart_send(buffer[i]);
 	}
 }
 
 
-static void _serialSendCallback(uint8_t data, void *callbackData) {
-	uart_send(data);
-}
-
-
-static void _serialFlushCallback(void *callbackData) {
-}
-
-
-#define DATA_BUFFER_SIZE 384
+#define DATA_BUFFER_SIZE 512
 
 static uint8_t _dataBuffer[DATA_BUFFER_SIZE];
 
 
 int main(int argc, char *argv[]) {
+	Programmer programmer;
+
 	uart_initialize();
 	spi_initialize();
 
+	programmer_setup(
+		&programmer,
+		_dataBuffer,
+		DATA_BUFFER_SIZE,
+		_programmerRequestCallback,
+		_programmerResponseCallback,
+		NULL
+	);
+
 	{
-		ProtocolReveicerSetupParameters params;
+		uint16_t idleCounter = 0;
 
-		params.memory     = _dataBuffer;
-		params.memorySize = DATA_BUFFER_SIZE;
+		while (1) {
+			if (! uart_poll()) {
+				if (++idleCounter == 60000) {
+					programmer_reset(&programmer);
+				}
 
-		params.serialFlushCallback = _serialFlushCallback;
-		params.serialSendCallback  = _serialSendCallback;
-		params.spiCsCallback       = _spiCsCallback;
-		params.spiTransferCallback = _spiTransferCallback;
-		params.callbackData        = NULL;
+			} else {
+				idleCounter = 0;
 
-		programmer_setup(&params);
-	}
-
-	while (1) {
-		if (! uart_poll()) {
-			programmer_onIdle();
-
-		} else {
-			programmer_onByte(uart_get());
+				programmer_putByte(&programmer, uart_get());
+			}
 		}
 	}
 }
