@@ -22,8 +22,6 @@
 
 #include <boost/program_options.hpp>
 
-#include "crc8.h"
-#include "protocol.h"
 #include "spi.h"
 #include "spi/creator.h"
 #include "exception.h"
@@ -401,15 +399,22 @@ static void _flashRead(uint32_t address, const SpiFlashDevice &dev, uint8_t *buf
 		{
 			Spi::Messages msgs;
 
-			msgs.add()
-				.reset()
-				.autoChipSelect(false)
-				.send()
-					.byte(0x03) // Read data (READ)
+			{
+				auto &msg = msgs.add();
 
-					.byte((address >> 16) & 0xff) // Address
-					.byte((address >>  8) & 0xff)
-					.byte((address >>  0) & 0xff);
+				msg
+					.reset()
+					.send()
+						.byte(0x03) // Read data (READ)
+
+						.byte((address >> 16) & 0xff) // Address
+						.byte((address >>  8) & 0xff)
+						.byte((address >>  0) & 0xff);
+
+				msg.
+					flags()
+						.chipDeselect(false);
+			}
 
 			spiDev->transfer(msgs);
 		}
@@ -418,8 +423,8 @@ static void _flashRead(uint32_t address, const SpiFlashDevice &dev, uint8_t *buf
 			Spi::Messages msgs;
 
 			msgs.add()
-				.reset()
-				.autoChipSelect(false);
+				.flags()
+					.chipDeselect(false);
 
 			// Disable retransmissions
 			{

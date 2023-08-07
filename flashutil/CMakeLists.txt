@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 11)
 find_package(Boost COMPONENTS program_options thread chrono REQUIRED)
 
 set(SRC_FILES 
-	../common/src/crc8.c 
+	../common/src/common/crc8.c 
 
 	src/spi.cpp
 	src/spi/creator.cpp

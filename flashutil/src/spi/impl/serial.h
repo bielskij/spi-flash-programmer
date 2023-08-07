@@ -25,11 +25,6 @@ class SerialSpi : public Spi {
 		void   setConfig(const Config &config) override;
 
 	private:
-		void cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize);
-		void spiCs(bool high);
-		void spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize);
-
-	private:
 		class Impl;
 
 		std::unique_ptr<Impl> self;

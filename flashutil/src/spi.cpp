@@ -111,7 +111,7 @@ Spi::Message::RecvOpts &Spi::Message::RecvOpts::reset() {
 
 
 Spi::Message::Message() {
-	this->_autoCs = true;
+	this->reset();
 }
 
 
@@ -130,25 +130,17 @@ Spi::Message::RecvOpts &Spi::Message::recv() {
 }
 
 
-Spi::Message &Spi::Message::autoChipSelect(bool autoCsAllowed) {
-	this->_autoCs = autoCsAllowed;
-
-	return *this;
+Spi::Message::Flags &Spi::Message::flags() {
+	return this->_flags;
 }
 
 
 Spi::Message &Spi::Message::reset() {
 	this->_recvOpts.reset();
 	this->_sendOpts.reset();
-
-	this->_autoCs = true;
+	this->_flags.reset();
 
 	return *this;
-}
-
-
-bool Spi::Message::isAutoChipSelect() const {
-	return this->_autoCs;
 }
 
 

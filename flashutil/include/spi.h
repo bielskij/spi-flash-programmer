@@ -17,6 +17,24 @@ class Spi {
 	public:
 		class Message {
 			public:
+				class Flags {
+					public:
+						Flags() {
+							this->reset();
+						}
+
+						Flags &chipDeselect(bool deselect) {
+							this->_chipDeselect = deselect;  return *this;
+						}
+
+						Flags &reset() {
+							this->chipDeselect(true); return *this;
+						}
+
+					private:
+						bool _chipDeselect;
+				};
+
 				class SendOpts {
 					public:
 						SendOpts &byte(uint8_t byte);
@@ -58,14 +76,12 @@ class Spi {
 			public:
 				SendOpts &send();
 				RecvOpts &recv();
-				Message  &autoChipSelect(bool autoCsAllowed);
+				Flags    &flags();
 
 				Message &reset();
 
-				bool isAutoChipSelect() const;
-
 			private:
-				bool     _autoCs;
+				Flags    _flags;
 				SendOpts _sendOpts;
 				RecvOpts _recvOpts;
 		};
