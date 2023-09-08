@@ -23,14 +23,14 @@ struct SerialSpi::Impl {
 	std::unique_ptr<Serial> serial;
 	Config                  config;
 	uint8_t                 id;
+	Capabilities            capabilities;
+	bool                    attached;
 
 	Impl(const std::string &path, int baudrate) {
-		this->id = 0;
+		this->id       = 0;
+		this->attached = false;
 
 		this->serial.reset(new Serial(path, baudrate));
-
-		// Be sure CS pin is released.
-		this->chipSelect(false);
 	}
 
 
@@ -90,17 +90,17 @@ struct SerialSpi::Impl {
 
 
 	void cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize) {
-		size_t triesLeft = this->config.getRetransmissions();
-		bool   success   = false;
+//		size_t triesLeft = this->config.getRetransmissions();
+//		bool   success   = false;
 
 		DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd", cmd, cmd, data, dataSize, response, responseSize));
 
-		do {
-			if (triesLeft) {
-				triesLeft--;
-			}
-
-			try {
+//		do {
+//			if (triesLeft) {
+//				triesLeft--;
+//			}
+//
+//			try {
 	#if 0
 				// Send
 				{
@@ -172,15 +172,15 @@ struct SerialSpi::Impl {
 					}
 				}
 	#endif
-				success = true;
-			} catch (const Exception &ex) {
-	//			PRINTFLN(("Got exception! %s - %zd tries left", ex.what(), triesLeft));
-
-				if (triesLeft == 0) {
-					throw;
-				}
-			}
-		} while (! success);
+//				success = true;
+//			} catch (const Exception &ex) {
+//	//			PRINTFLN(("Got exception! %s - %zd tries left", ex.what(), triesLeft));
+//
+//				if (triesLeft == 0) {
+//					throw;
+//				}
+//			}
+//		} while (! success);
 
 	//	debug_dumpBuffer(response, responseSize, 32, 0);
 	}
@@ -222,6 +222,22 @@ struct SerialSpi::Impl {
 
 		DBG(("totalSize: %zd, txProcessed: %zd, rxProcessed: %zd, totalPorcessed: %zd", totalSize, txProcessed, rxProcessed, totalProcessed));
 	}
+
+	const Capabilities &getCapabilities() const {
+		return this->capabilities;
+	}
+
+
+	void attach() {
+		// Be sure CS pin is released.
+		this->chipSelect(false);
+	}
+
+
+	void detach() {
+		// Be sure CS pin is released.
+		this->chipSelect(false);
+	}
 };
 
 
@@ -252,4 +268,19 @@ void SerialSpi::setConfig(const Config &config) {
 
 void SerialSpi::transfer(Messages &msgs) {
 	self->transfer(msgs);
+}
+
+
+const Spi::Capabilities &SerialSpi::getCapabilities() const {
+	return self->getCapabilities();
+}
+
+
+void SerialSpi::attach() {
+	self->attach();
+}
+
+
+void SerialSpi::detach() {
+	self->detach();
 }

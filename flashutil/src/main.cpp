@@ -385,7 +385,7 @@ class ChipSelector {
 
 
 static void _flashRead(uint32_t address, const SpiFlashDevice &dev, uint8_t *buffer, size_t bufferSize) {
-	int defaultRetransmissions = spiDev->getConfig().getRetransmissions();
+	int defaultRetransmissions = 3;//spiDev->getConfig().getRetransmissions();
 
 	size_t bufferWritten = 0;
 	int    tries = 0;
@@ -430,7 +430,7 @@ static void _flashRead(uint32_t address, const SpiFlashDevice &dev, uint8_t *buf
 			{
 				Spi::Config c = spiDev->getConfig();
 
-				c.setRetransmissions(0);
+//				c.setRetransmissions(0);
 
 				spiDev->setConfig(c);
 			}
@@ -464,7 +464,7 @@ static void _flashRead(uint32_t address, const SpiFlashDevice &dev, uint8_t *buf
 	{
 		Spi::Config c = spiDev->getConfig();
 
-		c.setRetransmissions(defaultRetransmissions);
+//		c.setRetransmissions(defaultRetransmissions);
 
 		spiDev->setConfig(c);
 	}

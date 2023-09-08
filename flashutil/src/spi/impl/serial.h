@@ -24,6 +24,10 @@ class SerialSpi : public Spi {
 		Config getConfig() override;
 		void   setConfig(const Config &config) override;
 
+		const Capabilities &getCapabilities() const override;
+		void attach() override;
+		void detach() override;
+
 	private:
 		class Impl;
 

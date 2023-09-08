@@ -101,19 +101,25 @@ class Spi {
 		class Config {
 			public:
 				Config() {
-					this->_retransmissions = 3;
+				}
+		};
+
+		class Capabilities {
+			public:
+				Capabilities() {
+					this->_transferSizeMax = 0;
 				}
 
-				int getRetransmissions() const {
-					return this->_retransmissions;
+				size_t getTransferSizeMax() {
+					return this->_transferSizeMax;
 				}
 
-				void setRetransmissions(int val) {
-					this->_retransmissions = val;
+				void setTransferSizeMax(size_t size) {
+					this->_transferSizeMax = size;
 				}
 
 			private:
-				int _retransmissions;
+				size_t _transferSizeMax;
 		};
 
 	public:
@@ -124,6 +130,10 @@ class Spi {
 
 		virtual Config getConfig() = 0;
 		virtual void   setConfig(const Config &config) = 0;
+
+		virtual const Capabilities &getCapabilities() const = 0;
+		virtual void attach() = 0;
+		virtual void detach() = 0;
 
 	protected:
 		Spi() {}
