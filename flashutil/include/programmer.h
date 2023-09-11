@@ -9,6 +9,8 @@
 #define PROGRAMMER_H_
 
 #include "spi.h"
+#include "flash/registry.h"
+
 
 class Programmer {
 	public:
@@ -25,13 +27,17 @@ class Programmer {
 		void eraseSectorByAddress(uint32_t addres);
 		void eraseSectorByNumber(int sectorNo);
 
+		static FlashRegistry &getRegistry();
+
 	private:
 		void cmdEraseBlock(uint32_t address);
 		void cmdEraseSector(uint32_t address);
-
+		void cmdGetInfo(std::vector<uint8_t> &id);
 
 	private:
-		int _maxReconnections;
+		Flash _flashInfo;
+		int   _maxReconnections;
+		Spi  *_spi;
 };
 
 

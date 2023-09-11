@@ -10,22 +10,50 @@
 #define FLASH_H_
 
 #include <string>
-#include <array>
+#include <vector>
 
 class Flash {
 	public:
-		Flash(const std::string &name, uint32_t jedecId, uint16_t extId, size_t blockSize, size_t nblocks, size_t sectorSize, size_t nSectors, uint8_t protectMask);
+		Flash();
+		Flash(const std::string &name, const std::vector<uint8_t> &jedecId, size_t blockSize, size_t nblocks, size_t sectorSize, size_t nSectors, uint8_t protectMask);
+
+		const std::string &getName() const;
+		void setName(const std::string &name);
+
+		const std::vector<uint8_t> &getId() const;
+		void setId(const std::vector<uint8_t> &id);
+
+		size_t getBlockSize() const;
+		void   setBlockSize(size_t size);
+
+		size_t getBlockCount() const;
+		void   setBlockCount(size_t count);
+
+		size_t getSectorSize() const;
+		void   setSectorSize(size_t size);
+
+		size_t getSectorCount() const;
+		void   setSectorCount(size_t count);
+
+		size_t getPageSize() const;
+		void   setPageSize(size_t size);
+
+		uint8_t getProtectMask() const;
+		void    setProtectMask(uint8_t mask);
+
+		size_t getSize() const;
+
+		bool isValid() const;
 
 	private:
-		std::string            name;
-		std::array<uint8_t, 5> id;
-		char                   idLen;
-		size_t                 blockSize;
-		size_t                 blockCount;
-		size_t                 sectorSize;
-		size_t                 sectorCount;
-		size_t                 pageSize;
-		uint8_t                protectMask;
+		std::string          name;
+		std::vector<uint8_t> id;
+		size_t               blockSize;
+		size_t               blockCount;
+		size_t               sectorSize;
+		size_t               sectorCount;
+		size_t               pageSize;
+		uint8_t              protectMask;
 };
 
 

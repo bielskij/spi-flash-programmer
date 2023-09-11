@@ -18,16 +18,19 @@ class FlashBuilder {
 		FlashBuilder();
 
 		FlashBuilder &setName(const std::string &name);
-		FlashBuilder &setJedecId(const uint8_t jedec[3]);
-		FlashBuilder &setExtendedJedecId(const uint8_t extJedec[2]);
+		FlashBuilder &setJedecId(const std::vector<uint8_t> &jedec);
 		FlashBuilder &setBlockSize(size_t size);
 		FlashBuilder &setBlockCount(size_t count);
 		FlashBuilder &setSectorSize(size_t size);
 		FlashBuilder &setSectorCount(size_t count);
 		FlashBuilder &setSize(size_t size);
 		FlashBuilder &setProtectMask(uint8_t mask);
+		FlashBuilder &reset();
 
 		Flash build();
+
+	private:
+		Flash flash;
 };
 
 #endif /* FLASHUTIL_INCLUDE_FLASH_BUILDER_H_ */

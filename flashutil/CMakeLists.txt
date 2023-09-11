@@ -13,6 +13,12 @@ set(SRC_FILES
 	src/spi/creator.cpp
 	src/spi/impl/serial.cpp
 	src/spi/impl/serial/serial.cpp
+	
+	src/flash.cpp
+	src/flash/builder.cpp
+	src/flash/registry.cpp
+	
+	src/programmer.cpp
 	src/debug.c
 	src/main.cpp
 )
