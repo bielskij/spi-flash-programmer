@@ -30,6 +30,11 @@ class Programmer {
 		static FlashRegistry &getRegistry();
 
 	private:
+		void verifyFlashInfoAreaByAddress(uint32_t address, size_t size, size_t alignment);
+		void verifyFlashInfoBlockNo(int blockNo);
+		void verifyFlashInfoSectorNo(int sectorNo);
+
+		void cmdEraseChip();
 		void cmdEraseBlock(uint32_t address);
 		void cmdEraseSector(uint32_t address);
 		void cmdGetInfo(std::vector<uint8_t> &id);

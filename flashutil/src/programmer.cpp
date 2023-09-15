@@ -58,68 +58,84 @@ void Programmer::end() {
 }
 
 
-void Programmer::eraseChip() {
-	if (! this->_flashInfo.isValid()) {
+static void _verifyCommon(const Flash &info) {
+	if (! info.isValid()) {
 		throw std::runtime_error("Flash info is incomplete or invalid!");
-	}
-
-	{
-		Spi::Messages msgs;
-
-		{
-			auto &msg = msgs.add();
-
-			msg.send()
-				.byte(0xc7); // Chip erase (CE)
-		}
-
-		_spi->transfer(msgs);
 	}
 }
 
 
-void Programmer::eraseBlockByAddress(uint32_t address) {
-	if (! this->_flashInfo.isValid()) {
-		throw std::runtime_error("Flash info is incomplete or invalid!");
-	}
+void Programmer::verifyFlashInfoAreaByAddress(uint32_t address, size_t size, size_t alignment) {
+	_verifyCommon(this->_flashInfo);
 
-	if (address + this->_flashInfo.getBlockSize() > this->_flashInfo.getSize()) {
+	if (address + size > this->_flashInfo.getSize()) {
 		throw std::runtime_error("Address is out of bound!");
 	}
 
-	if ((address % this->_flashInfo.getBlockSize()) != 0) {
-		throw std::runtime_error("Address is not a multiple of block size!");
+	if (alignment > 0) {
+		if ((address % alignment) != 0) {
+			throw std::runtime_error("Address is not a multiple of " + std::to_string(alignment) + "!");
+		}
 	}
+}
+
+
+void Programmer::verifyFlashInfoBlockNo(int blockNo) {
+	_verifyCommon(this->_flashInfo);
+}
+
+
+void Programmer::verifyFlashInfoSectorNo(int sectorNo) {
+	_verifyCommon(this->_flashInfo);
+}
+
+
+void Programmer::eraseChip() {
+	_verifyCommon(this->_flashInfo);
+
+	this->cmdEraseChip();
+}
+
+
+void Programmer::eraseBlockByAddress(uint32_t address) {
+	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getBlockSize(), this->_flashInfo.getBlockSize());
 
 	this->cmdEraseBlock(address);
 }
 
 
 void Programmer::eraseBlockByNumber(int blockNo) {
+	this->verifyFlashInfoBlockNo(blockNo);
+
 	this->cmdEraseBlock(blockNo * this->_flashInfo.getBlockSize());
 }
 
 
 void Programmer::eraseSectorByAddress(uint32_t address) {
-	if (! this->_flashInfo.isValid()) {
-		throw std::runtime_error("Flash info is incomplete or invalid!");
-	}
-
-	if (address + this->_flashInfo.getSectorSize() > this->_flashInfo.getSize()) {
-		throw std::runtime_error("Address is out of bound!");
-	}
-
-	if ((address % this->_flashInfo.getSectorSize()) != 0) {
-		throw std::runtime_error("Address is not a multiple of sector size!");
-	}
-
+	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getSectorSize(), this->_flashInfo.getSectorSize());
 
 	this->cmdEraseSector(address);
 }
 
 
 void Programmer::eraseSectorByNumber(int sectorNo) {
+	this->verifyFlashInfoSectorNo(sectorNo);
+
 	this->cmdEraseSector(sectorNo * this->_flashInfo.getSectorSize());
+}
+
+
+void Programmer::cmdEraseChip() {
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0xc7); // Chip erase (CE)
+	}
+
+	_spi->transfer(msgs);
 }
 
 
