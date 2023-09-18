@@ -110,16 +110,16 @@ class Spi {
 					this->_transferSizeMax = 0;
 				}
 
-				size_t getTransferSizeMax() {
+				std::size_t getTransferSizeMax() {
 					return this->_transferSizeMax;
 				}
 
-				void setTransferSizeMax(size_t size) {
+				void setTransferSizeMax(std::size_t size) {
 					this->_transferSizeMax = size;
 				}
 
 			private:
-				size_t _transferSizeMax;
+				std::size_t _transferSizeMax;
 		};
 
 	public:

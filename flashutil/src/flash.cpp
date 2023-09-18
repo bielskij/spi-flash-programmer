@@ -99,6 +99,16 @@ void Flash::setPageSize(size_t size) {
 }
 
 
+size_t Flash::getPageCount() const {
+	return this->pageCount;
+}
+
+
+void Flash::setPageCount(size_t count) {
+	this->pageCount = count;
+}
+
+
 uint8_t Flash::getProtectMask() const {
 	return this->protectMask;
 }

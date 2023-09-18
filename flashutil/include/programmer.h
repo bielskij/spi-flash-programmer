@@ -21,11 +21,11 @@ class Programmer {
 
 		void eraseChip();
 
-		void eraseBlockByAddress(uint32_t address);
-		void eraseBlockByNumber(int blockNo);
+		void eraseBlockByAddress(uint32_t address, bool skipIfErased);
+		void eraseBlockByNumber(int blockNo, bool skipIfErased);
 
-		void eraseSectorByAddress(uint32_t addres);
-		void eraseSectorByNumber(int sectorNo);
+		void eraseSectorByAddress(uint32_t addres, bool skipIfErased);
+		void eraseSectorByNumber(int sectorNo, bool skipIfErased);
 
 		static FlashRegistry &getRegistry();
 
@@ -34,10 +34,16 @@ class Programmer {
 		void verifyFlashInfoBlockNo(int blockNo);
 		void verifyFlashInfoSectorNo(int sectorNo);
 
+		bool checkErased(uint32_t address, size_t size);
+		void waitForWIPClearance(int timeoutMs);
+
 		void cmdEraseChip();
 		void cmdEraseBlock(uint32_t address);
 		void cmdEraseSector(uint32_t address);
 		void cmdGetInfo(std::vector<uint8_t> &id);
+		void cmdGetStatus(uint8_t &reg);
+		void cmdWriteEnable();
+		void cmdFlashReadBegin(uint32_t address);
 
 	private:
 		Flash _flashInfo;

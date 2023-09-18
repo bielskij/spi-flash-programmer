@@ -38,6 +38,9 @@ class Flash {
 		size_t getPageSize() const;
 		void   setPageSize(size_t size);
 
+		size_t getPageCount() const;
+		void   setPageCount(size_t count);
+
 		uint8_t getProtectMask() const;
 		void    setProtectMask(uint8_t mask);
 
@@ -53,6 +56,7 @@ class Flash {
 		size_t               sectorSize;
 		size_t               sectorCount;
 		size_t               pageSize;
+		size_t               pageCount;
 		uint8_t              protectMask;
 };
 

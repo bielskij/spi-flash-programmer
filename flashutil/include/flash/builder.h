@@ -10,6 +10,7 @@
 
 #include <string>
 #include <vector>
+#include <cstddef>
 
 #include "flash.h"
 
@@ -19,11 +20,13 @@ class FlashBuilder {
 
 		FlashBuilder &setName(const std::string &name);
 		FlashBuilder &setJedecId(const std::vector<uint8_t> &jedec);
-		FlashBuilder &setBlockSize(size_t size);
-		FlashBuilder &setBlockCount(size_t count);
-		FlashBuilder &setSectorSize(size_t size);
-		FlashBuilder &setSectorCount(size_t count);
-		FlashBuilder &setSize(size_t size);
+		FlashBuilder &setBlockSize(std::size_t size);
+		FlashBuilder &setBlockCount(std::size_t count);
+		FlashBuilder &setSectorSize(std::size_t size);
+		FlashBuilder &setSectorCount(std::size_t count);
+		FlashBuilder &setPageSize(std::size_t size);
+		FlashBuilder &setPageCount(std::size_t count);
+		FlashBuilder &setSize(std::size_t size);
 		FlashBuilder &setProtectMask(uint8_t mask);
 		FlashBuilder &reset();
 

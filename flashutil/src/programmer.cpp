@@ -4,6 +4,8 @@
  *  Created on: 11 wrz 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
+#include <algorithm>
+#include <stdexcept>
 
 #include "programmer.h"
 #include "flash/builder.h"
@@ -13,6 +15,10 @@
 
 #define KiB(_x)(1024 * _x)
 #define Mib(_x)((1024 * 1024 * (_x)) / 8)
+
+// TODO: Each chip should define mask for those flags
+#define STATUS_FLAG_WLE 0x02
+#define STATUS_FLAG_WIP 0x01
 
 
 Programmer::Programmer(Spi *spiDev) {
@@ -90,37 +96,120 @@ void Programmer::verifyFlashInfoSectorNo(int sectorNo) {
 }
 
 
+bool Programmer::checkErased(uint32_t address, size_t size) {
+	bool ret = true;
+
+	_verifyCommon(this->_flashInfo);
+
+	{
+		size_t  pageSize = this->_flashInfo.getPageSize();
+		uint8_t pageBuffer[pageSize];
+
+		if (size < pageSize) {
+			size = pageSize;
+		}
+
+		this->cmdFlashReadBegin(address);
+
+		for (int page = 0; page * pageSize < size / pageSize; page++) {
+			Spi::Messages msgs;
+
+			{
+				auto &msg = msgs.add();
+
+				msg.recv()
+					.bytes(pageSize);
+
+				msg.flags()
+					.chipDeselect(false);
+			}
+
+			_spi->transfer(msgs);
+
+			{
+				auto *data = msgs.at(0).recv().data();
+
+				ret = std::all_of(pageBuffer, pageBuffer + pageSize, [](uint8_t byte) { return byte == 0xff; });
+				if (! ret) {
+					break;
+				}
+			}
+		}
+
+		_spi->chipSelect(false);
+	}
+
+	return ret;
+}
+
+
+void Programmer::waitForWIPClearance(int timeoutMs) {
+	bool wipOn = true;
+
+	while (wipOn && (timeoutMs > 0)) {
+		uint8_t statusReg;
+
+		this->cmdGetStatus(statusReg);
+
+		wipOn = ((statusReg & STATUS_FLAG_WIP) != 0);
+		if (wipOn) {
+			int interval = std::min(timeoutMs, 10);
+
+			{
+				struct timespec tv;
+
+				tv.tv_sec  = (interval / 1000);
+				tv.tv_nsec = (interval % 1000) * 1000000LL;
+
+				nanosleep(&tv, nullptr);
+			}
+
+			timeoutMs -= interval;
+		}
+	}
+
+	if (wipOn) {
+		throw std::runtime_error("Waiting for WIP flag clearance has timed out!");
+	}
+}
+
+
 void Programmer::eraseChip() {
 	_verifyCommon(this->_flashInfo);
 
+	this->cmdWriteEnable();
 	this->cmdEraseChip();
 }
 
 
-void Programmer::eraseBlockByAddress(uint32_t address) {
+void Programmer::eraseBlockByAddress(uint32_t address, bool skipIfErased) {
 	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getBlockSize(), this->_flashInfo.getBlockSize());
 
+	this->cmdWriteEnable();
 	this->cmdEraseBlock(address);
 }
 
 
-void Programmer::eraseBlockByNumber(int blockNo) {
+void Programmer::eraseBlockByNumber(int blockNo, bool skipIfErased) {
 	this->verifyFlashInfoBlockNo(blockNo);
 
+	this->cmdWriteEnable();
 	this->cmdEraseBlock(blockNo * this->_flashInfo.getBlockSize());
 }
 
 
-void Programmer::eraseSectorByAddress(uint32_t address) {
+void Programmer::eraseSectorByAddress(uint32_t address, bool skipIfErased) {
 	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getSectorSize(), this->_flashInfo.getSectorSize());
 
+	this->cmdWriteEnable();
 	this->cmdEraseSector(address);
 }
 
 
-void Programmer::eraseSectorByNumber(int sectorNo) {
+void Programmer::eraseSectorByNumber(int sectorNo, bool skipIfErased) {
 	this->verifyFlashInfoSectorNo(sectorNo);
 
+	this->cmdWriteEnable();
 	this->cmdEraseSector(sectorNo * this->_flashInfo.getSectorSize());
 }
 
@@ -203,6 +292,61 @@ void Programmer::cmdGetInfo(std::vector<uint8_t> &id) {
 }
 
 
+void Programmer::cmdGetStatus(uint8_t &reg) {
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x05); // RDSR
+
+		msg.recv()
+			.skip(1)
+			.bytes(1);
+	}
+
+	_spi->transfer(msgs);
+
+	reg = msgs.at(0).recv().at(0);
+}
+
+
+void Programmer::cmdWriteEnable() {
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x06); // WREN
+	}
+
+	_spi->transfer(msgs);
+}
+
+
+void Programmer::cmdFlashReadBegin(uint32_t address) {
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x03) // Read data (READ)
+
+			.byte((address >> 16) & 0xff) // Address
+			.byte((address >>  8) & 0xff)
+			.byte((address >>  0) & 0xff);
+
+		msg.flags()
+			.chipDeselect(false);
+	}
+
+	_spi->transfer(msgs);
+}
+
+
 FlashRegistry &Programmer::getRegistry() {
 	static FlashRegistry registry = []() {
 		FlashRegistry reg;
@@ -216,6 +360,7 @@ FlashRegistry &Programmer::getRegistry() {
 				.setJedecId    ({ 0xc2, 0x20, 0x12 })
 				.setBlockSize  (KiB(64))
 				.setSectorSize (KiB(4))
+				.setPageSize   (256)
 				.setSize       (Mib(2))
 				.setProtectMask(0x8c)
 				.build()
@@ -227,6 +372,7 @@ FlashRegistry &Programmer::getRegistry() {
 				.setJedecId    ({ 0xc2, 0x20, 0x15 })
 				.setBlockSize  (KiB(64))
 				.setSectorSize (KiB(4))
+				.setPageSize   (256)
 				.setSize       (Mib(16))
 				.setProtectMask(0xbc)
 				.build()
@@ -238,6 +384,7 @@ FlashRegistry &Programmer::getRegistry() {
 				.setJedecId    ({ 0xef, 0x40, 0x16 })
 				.setBlockSize  (KiB(64))
 				.setSectorSize (KiB(4))
+				.setPageSize   (256)
 				.setSize       (Mib(32))
 				.setProtectMask(0xfc)
 				.build()
@@ -249,6 +396,7 @@ FlashRegistry &Programmer::getRegistry() {
 				.setJedecId    ({ 0xc8, 0x40, 0x14 })
 				.setBlockSize  (KiB(64))
 				.setSectorSize (KiB(4))
+				.setPageSize   (256)
 				.setSize       (Mib(8))
 				.setProtectMask(0x7c)
 				.build()
