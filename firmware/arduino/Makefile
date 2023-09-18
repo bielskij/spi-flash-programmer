@@ -62,7 +62,7 @@ all: init \
 	$(DIR_OUT)/$(APP_NAME).eep \
 	$(DIR_OUT)/$(APP_NAME).bin
 
-	$(SIZE) --format=avr $(DIR_OUT)/$(APP_NAME).elf
+	$(SIZE) --mcu=$(MCU) --format=avr $(DIR_OUT)/$(APP_NAME).elf
 
 burn: burn-arduino
 
