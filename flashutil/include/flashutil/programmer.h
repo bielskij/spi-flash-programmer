@@ -14,9 +14,9 @@
 
 class Programmer {
 	public:
-		Programmer(Spi *spiDev);
+		Programmer(Spi &spiDev, const FlashRegistry *registry);
 
-		void begin();
+		void begin(const Flash *defaultGeometry);
 		void end();
 
 		void eraseChip();
@@ -27,7 +27,6 @@ class Programmer {
 		void eraseSectorByAddress(uint32_t addres, bool skipIfErased);
 		void eraseSectorByNumber(int sectorNo, bool skipIfErased);
 
-		static const FlashRegistry &getRegistry();
 		const Flash &getFlashInfo() const;
 
 	private:
@@ -47,9 +46,10 @@ class Programmer {
 		void cmdFlashReadBegin(uint32_t address);
 
 	private:
-		Flash _flashInfo;
-		int   _maxReconnections;
-		Spi  *_spi;
+		Flash                _flashInfo;
+		const FlashRegistry *_flashRegistry;
+
+		Spi &_spi;
 };
 
 

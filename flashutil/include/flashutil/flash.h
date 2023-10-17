@@ -46,6 +46,10 @@ class Flash {
 
 		size_t getSize() const;
 
+		void setGeometry(const Flash &other);
+
+		bool isIdValid() const;
+		bool isGeometryValid() const;
 		bool isValid() const;
 
 	private:

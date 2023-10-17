@@ -80,7 +80,7 @@ FlashBuilder &FlashBuilder::setSize(std::size_t size) {
 
 
 FlashBuilder &FlashBuilder::setProtectMask(uint8_t mask) {
-	this->setProtectMask(mask);
+	this->flash.setProtectMask(mask);
 	return *this;
 }
 

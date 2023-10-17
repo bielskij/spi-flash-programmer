@@ -4,6 +4,374 @@
  *  Created on: 27 lut 2022
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
+#include <iostream>
+#include <fstream>
+
+#include <boost/program_options.hpp>
+
+#include "flashutil/entryPoint.h"
+#include "flashutil/spi/creator.h"
+#include "flashutil/flash/builder.h"
+#include "flashutil/flash/registry.h"
+#include "flashutil/debug.h"
+
+
+namespace po = boost::program_options;
+
+#define OPT_VERBOSE "verbose"
+#define OPT_HELP    "help"
+#define OPT_SERIAL  "serial"
+#define OPT_OUTPUT  "output"
+#define OPT_INPUT   "input"
+#define OPT_BAUD    "serial-baud"
+
+#define OPT_READ         "read"
+#define OPT_READ_BLOCK   "read-block"
+#define OPT_READ_SECTOR  "read-sector"
+
+#define OPT_ERASE        "erase"
+#define OPT_ERASE_BLOCK  "erase-block"
+#define OPT_ERASE_SECTOR "erase-sector"
+
+#define OPT_WRITE        "write"
+#define OPT_WRITE_BLOCK  "write-block"
+#define OPT_WRITE_SECTOR "write-sector"
+
+#define OPT_VERIFY       "verify"
+#define OPT_UNPROTECT    "unprotect"
+
+#define OPT_FLASH_DESC         "flash-geometry"
+#define OPT_OMIT_REDUNDANT_OPS "no-redudant-cycles"
+
+
+static void _usage(const po::options_description &opts) {
+	std::cout << opts << std::endl;
+
+	exit(flashutil::EntryPoint::RC_FAILURE);
+}
+
+
+static const FlashRegistry &_getRegistry() {
+	static FlashRegistry registry = []() {
+		FlashRegistry reg;
+
+#define KiB(_x)(1024 * _x)
+#define Mib(_x)((1024 * 1024 * (_x)) / 8)
+
+		{
+			FlashBuilder builder;
+
+			reg.addFlash(builder
+				.reset()
+				.setName("Macronix MX25L2026E/MX25l2005A")
+				.setJedecId    ({ 0xc2, 0x20, 0x12 })
+				.setBlockSize  (KiB(64))
+				.setSectorSize (KiB(4))
+				.setPageSize   (256)
+				.setSize       (Mib(2))
+				.setProtectMask(0x8c)
+				.build()
+			);
+
+			reg.addFlash(builder
+				.reset()
+				.setName("Macronix MX25V16066")
+				.setJedecId    ({ 0xc2, 0x20, 0x15 })
+				.setBlockSize  (KiB(64))
+				.setSectorSize (KiB(4))
+				.setPageSize   (256)
+				.setSize       (Mib(16))
+				.setProtectMask(0xbc)
+				.build()
+			);
+
+			reg.addFlash(builder
+				.reset()
+				.setName("Winbond W25Q32")
+				.setJedecId    ({ 0xef, 0x40, 0x16 })
+				.setBlockSize  (KiB(64))
+				.setSectorSize (KiB(4))
+				.setPageSize   (256)
+				.setSize       (Mib(32))
+				.setProtectMask(0xfc)
+				.build()
+			);
+
+			reg.addFlash(builder
+				.reset()
+				.setName("GigaDevice W25Q80")
+				.setJedecId    ({ 0xc8, 0x40, 0x14 })
+				.setBlockSize  (KiB(64))
+				.setSectorSize (KiB(4))
+				.setPageSize   (256)
+				.setSize       (Mib(8))
+				.setProtectMask(0x7c)
+				.build()
+			);
+		}
+
+		return reg;
+	}();
+
+	return registry;
+}
+
+#if 1
+int main(int argc, char *argv[]) {
+	int ret = flashutil::EntryPoint::RC_SUCCESS;
+
+	do {
+		FlashRegistry                     flashRegistry = _getRegistry();
+		Flash                             flashGeometry;
+		flashutil::EntryPoint::Parameters params;
+		std::unique_ptr<Spi>              spi;
+
+		{
+			po::options_description opDesc("Program parameters");
+
+			std::string serialPath;
+			int         serialBaud = 500000;
+
+			std::ifstream inFile;
+			std::ofstream outFile;
+
+			opDesc.add_options()
+				(OPT_VERBOSE     ",v",                           "Verbose output")
+				(OPT_HELP        ",h",                           "Print usage message")
+				(OPT_SERIAL      ",s", po::value<std::string>(), "Serial port path")
+				(OPT_OUTPUT      ",o", po::value<std::string>(), "Output file path or '-' for stdout")
+				(OPT_INPUT       ",i", po::value<std::string>(), "Input file path or '-' for stdin")
+				(OPT_READ        ",r",                           "Read to output file")
+				(OPT_WRITE       ",w",                           "Write input file")
+				(OPT_ERASE       ",e",                           "Erase whole chip")
+				(OPT_VERIFY      ",V",                           "Verify writing process")
+				(OPT_UNPROTECT   ",u",                           "Unprotect the chip before doing any operation on it")
+				(OPT_FLASH_DESC  ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+				(OPT_BAUD,             po::value<int>(),         "Serial port baudrate")
+				(OPT_READ_BLOCK,       po::value<off_t>(),       "Read block at index")
+				(OPT_READ_SECTOR,      po::value<off_t>(),       "Read Sector at index")
+				(OPT_ERASE_BLOCK,      po::value<off_t>(),       "Erase block at index")
+				(OPT_ERASE_SECTOR,     po::value<off_t>(),       "Erase sector at index")
+				(OPT_WRITE_BLOCK,      po::value<off_t>(),       "Write block from input file")
+				(OPT_WRITE_SECTOR,     po::value<off_t>(),       "Write sector from input file")
+				(OPT_OMIT_REDUNDANT_OPS,                         "Prevent from redundant erase/write cycles");
+				;
+
+			po::variables_map vm;
+
+			po::store(po::command_line_parser(argc, argv).options(opDesc).run(), vm);
+
+			if (vm.count(OPT_HELP)) {
+				_usage(opDesc);
+			}
+
+			if (! vm.count(OPT_SERIAL)) {
+				PRINTFLN(("Serial port was not provided!"));
+				_usage(opDesc);
+
+			} else {
+				serialPath = vm[OPT_SERIAL].as<std::string>();
+			}
+
+			if (vm.count(OPT_BAUD)) {
+				serialBaud = vm[OPT_BAUD].as<int>();
+			}
+
+			if (vm.count(OPT_OUTPUT)) {
+				auto output = vm[OPT_OUTPUT].as<std::string>();
+				if (output == "-") {
+					params.outStream = &std::cout;
+
+				} else {
+					outFile.open(output, std::ios::out | std::ios::trunc | std::ios::binary);
+					if (! outFile.is_open()) {
+						ERR(("Unable to open output file! (" + output + ")"));
+
+						ret = flashutil::EntryPoint::RC_FAILURE;
+						break;
+					}
+
+					params.outStream = &outFile;
+				}
+			}
+
+			if (vm.count(OPT_INPUT)) {
+				auto input = vm[OPT_INPUT].as<std::string>();
+				if (input == "-") {
+					params.inStream = &std::cin;
+
+				}
+				else {
+					inFile.open(input, std::ios::in | std::ios::binary);
+					if (! inFile.is_open()) {
+						ERR(("Unable to open input file! (" + input + ")"));
+
+						ret = flashutil::EntryPoint::RC_FAILURE;
+						break;
+					}
+
+					params.inStream = &inFile;
+				}
+			}
+
+			if (vm.count(OPT_FLASH_DESC)) {
+				auto desc = vm[OPT_FLASH_DESC].as<std::string>();
+
+				int blockCount;
+				int blockSize;
+				int sectorCount;
+				int sectorSize;
+				uint8_t unprotectMask;
+
+				if (sscanf(
+					desc.c_str(), "%d:%d:%d:%d:%02hhx",
+					&blockSize, &blockCount,
+					&sectorSize, &sectorCount,
+					&unprotectMask
+				) != 5
+				) {
+					PRINTFLN(("Invalid flash-geometry syntax!"));
+
+					_usage(opDesc);
+				}
+
+				{
+					FlashBuilder builder;
+
+					builder
+						.setName("Custom")
+						.setBlockCount(blockCount)
+						.setBlockSize(blockSize)
+						.setSectorCount(sectorCount)
+						.setSectorSize(sectorSize)
+						.setProtectMask(unprotectMask);
+
+					flashGeometry = builder.build();
+				}
+			}
+
+			if (vm.count(OPT_VERIFY)) {
+				params.verify = true;
+			}
+
+			if (vm.count(OPT_UNPROTECT)) {
+				params.unprotectIfNeeded = true;
+			}
+
+			if (vm.count(OPT_OMIT_REDUNDANT_OPS)) {
+				params.omitRedundantWrites = true;
+			}
+
+			std::vector<flashutil::EntryPoint::Parameters> operations;
+
+			// Erase
+			{
+				params.operation = flashutil::EntryPoint::Operation::ERASE;
+
+				if (vm.count(OPT_ERASE)) {
+					params.mode = flashutil::EntryPoint::Mode::CHIP;
+
+					operations.push_back(params);
+				}
+
+				if (vm.count(OPT_ERASE_BLOCK)) {
+					params.mode  = flashutil::EntryPoint::Mode::BLOCK;
+					params.index = vm[OPT_ERASE_BLOCK].as<off_t>();
+
+					operations.push_back(params);
+				}
+
+				if (vm.count(OPT_ERASE_SECTOR)) {
+					params.mode  = flashutil::EntryPoint::Mode::SECTOR;
+					params.index = vm[OPT_ERASE_SECTOR].as<off_t>();
+
+					operations.push_back(params);
+				}
+			}
+
+			// Write
+			{
+				params.operation = flashutil::EntryPoint::Operation::WRITE;
+
+				if (vm.count(OPT_WRITE)) {
+					params.mode = flashutil::EntryPoint::Mode::CHIP;
+
+					operations.push_back(params);
+				}
+
+				if (vm.count(OPT_WRITE_BLOCK)) {
+					params.mode  = flashutil::EntryPoint::Mode::BLOCK;
+					params.index = vm[OPT_WRITE_BLOCK].as<off_t>();
+
+					operations.push_back(params);
+				}
+
+				if (vm.count(OPT_WRITE_SECTOR)) {
+					params.mode  = flashutil::EntryPoint::Mode::SECTOR;
+					params.index = vm[OPT_WRITE_SECTOR].as<off_t>();
+
+					operations.push_back(params);
+				}
+			}
+
+			// Read
+			{
+				params.operation = flashutil::EntryPoint::Operation::READ;
+
+				if (vm.count(OPT_READ)) {
+					params.mode = flashutil::EntryPoint::Mode::CHIP;
+
+					operations.push_back(params);
+				}
+
+				if (vm.count(OPT_READ_BLOCK)) {
+					params.mode  = flashutil::EntryPoint::Mode::BLOCK;
+					params.index = vm[OPT_READ_BLOCK].as<off_t>();
+
+					operations.push_back(params);
+				}
+
+				if (vm.count(OPT_READ_SECTOR)) {
+					params.mode  = flashutil::EntryPoint::Mode::SECTOR;
+					params.index = vm[OPT_READ_SECTOR].as<off_t>();
+
+					operations.push_back(params);
+				}
+			}
+
+			if (operations.empty()) {
+				params.operation = flashutil::EntryPoint::Operation::NO_OPERATION;
+				params.mode      = flashutil::EntryPoint::Mode::NONE;
+
+				operations.push_back(params);
+			}
+
+			for (const auto &operation : operations) {
+				if (! operation.isValid()) {
+					_usage(opDesc);
+				}
+			}
+
+			if (serialPath.empty()) {
+				_usage(opDesc);
+
+			} else {
+				SpiCreator spiCreator;
+
+				spi = spiCreator.createSerialSpi(serialPath, serialBaud);
+				if (! spi) {
+					_usage(opDesc);
+				}
+			}
+
+			ret = flashutil::EntryPoint::call(*spi.get(), flashRegistry, flashGeometry, operations);
+		}
+	} while (0);
+
+	return ret;
+}
+
+#else
 
 #include <string>
 #include <array>
@@ -914,3 +1282,4 @@ int main(int argc, char *argv[]) {
 
 	return ret;
 }
+#endif

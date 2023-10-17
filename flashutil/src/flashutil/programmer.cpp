@@ -8,53 +8,56 @@
 #include <stdexcept>
 
 #include "flashutil/programmer.h"
+#include "flashutil/exception.h"
 #include "flashutil/flash/builder.h"
 
 #include "flashutil/debug.h"
-
-
-#define KiB(_x)(1024 * _x)
-#define Mib(_x)((1024 * 1024 * (_x)) / 8)
 
 // TODO: Each chip should define mask for those flags
 #define STATUS_FLAG_WLE 0x02
 #define STATUS_FLAG_WIP 0x01
 
 
-Programmer::Programmer(Spi *spiDev) {
-	this->_spi              = spiDev;
-	this->_maxReconnections = 3;
+Programmer::Programmer(Spi &spiDev, const FlashRegistry *registry) : _spi(spiDev) {
+	this->_flashRegistry = registry;
 }
 
 
-void Programmer::begin() {
-	this->_flashInfo = Flash();
+void Programmer::begin(const Flash *defaultGeometry) {
+	auto &f = this->_flashInfo;
 
 	{
 		std::vector<uint8_t> id;
 
 		this->cmdGetInfo(id);
 
-		{
-			const auto &reg = this->getRegistry();
+		f.setId(id);
+		f.setName("Unknown chip");
 
-			try {
-				auto &f = this->_flashInfo;
+		if (defaultGeometry != nullptr) {
+			f.setGeometry(*defaultGeometry);
+		}
 
-				f = reg.getById(id);
+		if (f.isIdValid()) {
+			if (this->_flashRegistry != nullptr) {
+				try {
+					f = this->_flashRegistry->getById(id);
+				} catch (const std::exception &) {}
+			}
 
+			if (f.isGeometryValid()) {
 				PRINTFLN(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdB",
 					f.getName().c_str(), f.getId()[0], f.getId()[1], f.getId()[2],
 					f.getSize(), f.getBlockCount(), f.getBlockSize() / 1024,
 					f.getSectorCount(), f.getSectorSize()
 				));
 
-			} catch (...) {
-				PRINTF(("Detected flash chip of ID %02x, %02x, %02x - its geometry is unknown", id[0], id[1], id[2]));
-
-				this->_flashInfo.setId(id);
-				this->_flashInfo.setName("Unknown chip");
+			} else {
+				PRINTFLN(("Detected flash chip of ID %02x, %02x, %02x - its geometry is unknown", id[0], id[1], id[2]));
 			}
+
+		} else {
+			throw_Exception("No flash device detected!");
 		}
 	}
 }
@@ -130,7 +133,7 @@ bool Programmer::checkErased(uint32_t address, size_t size) {
 					.chipDeselect(false);
 			}
 
-			_spi->transfer(msgs);
+			_spi.transfer(msgs);
 
 			{
 				auto *data = msgs.at(0).recv().data();
@@ -142,7 +145,7 @@ bool Programmer::checkErased(uint32_t address, size_t size) {
 			}
 		}
 
-		_spi->chipSelect(false);
+		_spi.chipSelect(false);
 	}
 
 	return ret;
@@ -230,7 +233,7 @@ void Programmer::cmdEraseChip() {
 			.byte(0xc7); // Chip erase (CE)
 	}
 
-	_spi->transfer(msgs);
+	_spi.transfer(msgs);
 }
 
 
@@ -248,7 +251,7 @@ void Programmer::cmdEraseBlock(uint32_t address) {
 			.byte((address >>  0) & 0xff);
 	}
 
-	_spi->transfer(msgs);
+	_spi.transfer(msgs);
 }
 
 
@@ -266,7 +269,7 @@ void Programmer::cmdEraseSector(uint32_t address) {
 			.byte((address >>  0) & 0xff);
 	}
 
-	_spi->transfer(msgs);
+	_spi.transfer(msgs);
 }
 
 
@@ -286,7 +289,7 @@ void Programmer::cmdGetInfo(std::vector<uint8_t> &id) {
 			.bytes(3);
 	}
 
-	_spi->transfer(msgs);
+	_spi.transfer(msgs);
 
 	{
 		auto &recv = msgs.at(0).recv();
@@ -312,7 +315,7 @@ void Programmer::cmdGetStatus(uint8_t &reg) {
 			.bytes(1);
 	}
 
-	_spi->transfer(msgs);
+	_spi.transfer(msgs);
 
 	reg = msgs.at(0).recv().at(0);
 }
@@ -328,7 +331,7 @@ void Programmer::cmdWriteEnable() {
 			.byte(0x06); // WREN
 	}
 
-	_spi->transfer(msgs);
+	_spi.transfer(msgs);
 }
 
 
@@ -349,68 +352,5 @@ void Programmer::cmdFlashReadBegin(uint32_t address) {
 			.chipDeselect(false);
 	}
 
-	_spi->transfer(msgs);
-}
-
-
-const FlashRegistry &Programmer::getRegistry() {
-	static FlashRegistry registry = []() {
-		FlashRegistry reg;
-
-		{
-			FlashBuilder builder;
-
-			reg.addFlash(builder
-				.reset()
-				.setName("Macronix MX25L2026E/MX25l2005A")
-				.setJedecId    ({ 0xc2, 0x20, 0x12 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(2))
-				.setProtectMask(0x8c)
-				.build()
-			);
-
-			reg.addFlash(builder
-				.reset()
-				.setName("Macronix MX25V16066")
-				.setJedecId    ({ 0xc2, 0x20, 0x15 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(16))
-				.setProtectMask(0xbc)
-				.build()
-			);
-
-			reg.addFlash(builder
-				.reset()
-				.setName("Winbond W25Q32")
-				.setJedecId    ({ 0xef, 0x40, 0x16 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(32))
-				.setProtectMask(0xfc)
-				.build()
-			);
-
-			reg.addFlash(builder
-				.reset()
-				.setName("GigaDevice W25Q80")
-				.setJedecId    ({ 0xc8, 0x40, 0x14 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(8))
-				.setProtectMask(0x7c)
-				.build()
-			);
-		}
-
-		return reg;
-	}();
-
-	return registry;
+	_spi.transfer(msgs);
 }

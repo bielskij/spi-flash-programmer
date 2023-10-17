@@ -132,33 +132,32 @@ size_t Flash::getSize() const {
 }
 
 
-bool Flash::isValid() const {
-	bool allTheSameInvalid = true;
+void Flash::setGeometry(const Flash &other) {
+	this->setBlockCount(other.getBlockCount());
+	this->setBlockSize (other.getBlockSize());
 
+	this->setSectorCount(other.getSectorCount());
+	this->setSectorSize (other.getSectorSize());
+
+	this->setPageCount(other.getPageCount());
+	this->setPageSize (other.getPageSize());
+
+	this->setProtectMask(other.getProtectMask());
+}
+
+
+bool Flash::isIdValid() const {
 	for (auto b : this->id) {
-		if (b != 0x00) {
-			allTheSameInvalid = false;
-			break;
+		if (b != 0x00 && b != 0xff) {
+			return true;
 		}
 	}
 
-	if (allTheSameInvalid) {
-		return false;
-	}
+	return false;
+}
 
-	allTheSameInvalid = true;
 
-	for (auto b : this->id) {
-		if (b != 0xff) {
-			allTheSameInvalid = false;
-			break;
-		}
-	}
-
-	if (allTheSameInvalid) {
-		return false;
-	}
-
+bool Flash::isGeometryValid() const {
 	if (
 		this->getBlockCount()  == 0 ||
 		this->getBlockSize()   == 0 ||
@@ -169,4 +168,13 @@ bool Flash::isValid() const {
 	}
 
 	return true;
+}
+
+
+bool Flash::isValid() const {
+	if (this->isIdValid()) {
+		return false;
+	}
+
+	return this->isGeometryValid();
 }

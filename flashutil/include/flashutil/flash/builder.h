@@ -5,8 +5,8 @@
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef FLASHUTIL_INCLUDE_FLASH_BUILDER_H_
-#define FLASHUTIL_INCLUDE_FLASH_BUILDER_H_
+#ifndef BUILDER_H_
+#define BUILDER_H_
 
 #include <string>
 #include <vector>
@@ -36,4 +36,4 @@ class FlashBuilder {
 		Flash flash;
 };
 
-#endif /* FLASHUTIL_INCLUDE_FLASH_BUILDER_H_ */
+#endif /* BUILDER_H_ */

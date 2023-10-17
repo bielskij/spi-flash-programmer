@@ -20,6 +20,7 @@ set(SRC_FILES
 	
 	src/flashutil/programmer.cpp
 	src/flashutil/debug.c
+	src/flashutil/entryPoint.cpp
 	src/flashutil/main.cpp
 )
 
