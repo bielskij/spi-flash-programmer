@@ -11,7 +11,7 @@
 #include <string>
 #include <memory>
 
-#include "spi.h"
+#include "flashutil/spi.h"
 
 class SerialSpi : public Spi {
 	public:

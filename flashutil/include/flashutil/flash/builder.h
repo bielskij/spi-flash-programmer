@@ -12,7 +12,7 @@
 #include <vector>
 #include <cstddef>
 
-#include "flash.h"
+#include "flashutil/flash.h"
 
 class FlashBuilder {
 	public:

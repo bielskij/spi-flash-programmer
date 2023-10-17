@@ -1,4 +1,4 @@
-#include "spi.h"
+#include "flashutil/spi.h"
 
 
 Spi::Message::SendOpts &Spi::Message::SendOpts::byte(uint8_t byte) {

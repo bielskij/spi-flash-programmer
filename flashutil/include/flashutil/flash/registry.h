@@ -8,7 +8,7 @@
 #ifndef FLASH_REGISTRY_H_
 #define FLASH_REGISTRY_H_
 
-#include "flash.h"
+#include "flashutil/flash.h"
 
 
 class FlashRegistry {

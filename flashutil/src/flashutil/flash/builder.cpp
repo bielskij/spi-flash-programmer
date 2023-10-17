@@ -5,7 +5,7 @@
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#include "flash/builder.h"
+#include "flashutil/flash/builder.h"
 
 
 FlashBuilder::FlashBuilder() {

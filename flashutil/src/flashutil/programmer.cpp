@@ -7,10 +7,10 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "programmer.h"
-#include "flash/builder.h"
+#include "flashutil/programmer.h"
+#include "flashutil/flash/builder.h"
 
-#include "debug.h"
+#include "flashutil/debug.h"
 
 
 #define KiB(_x)(1024 * _x)
@@ -36,7 +36,7 @@ void Programmer::begin() {
 		this->cmdGetInfo(id);
 
 		{
-			auto &reg = this->getRegistry();
+			const auto &reg = this->getRegistry();
 
 			try {
 				auto &f = this->_flashInfo;
@@ -52,7 +52,8 @@ void Programmer::begin() {
 			} catch (...) {
 				PRINTF(("Detected flash chip of ID %02x, %02x, %02x - its geometry is unknown", id[0], id[1], id[2]));
 
-				throw;
+				this->_flashInfo.setId(id);
+				this->_flashInfo.setName("Unknown chip");
 			}
 		}
 	}
@@ -60,7 +61,12 @@ void Programmer::begin() {
 
 
 void Programmer::end() {
+	this->_flashInfo = Flash();
+}
 
+
+const Flash &Programmer::getFlashInfo() const {
+	return this->_flashInfo;
 }
 
 
@@ -347,7 +353,7 @@ void Programmer::cmdFlashReadBegin(uint32_t address) {
 }
 
 
-FlashRegistry &Programmer::getRegistry() {
+const FlashRegistry &Programmer::getRegistry() {
 	static FlashRegistry registry = []() {
 		FlashRegistry reg;
 

@@ -2,25 +2,25 @@ cmake_minimum_required(VERSION 3.12)
 
 project(flashutil)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 find_package(Boost COMPONENTS program_options thread chrono REQUIRED)
 
 set(SRC_FILES 
 	../common/src/common/crc8.c 
 
-	src/spi.cpp
-	src/spi/creator.cpp
-	src/spi/impl/serial.cpp
-	src/spi/impl/serial/serial.cpp
+	src/flashutil/spi.cpp
+	src/flashutil/spi/creator.cpp
+	src/flashutil/spi/impl/serial.cpp
+	src/flashutil/spi/impl/serial/serial.cpp
 	
-	src/flash.cpp
-	src/flash/builder.cpp
-	src/flash/registry.cpp
+	src/flashutil/flash.cpp
+	src/flashutil/flash/builder.cpp
+	src/flashutil/flash/registry.cpp
 	
-	src/programmer.cpp
-	src/debug.c
-	src/main.cpp
+	src/flashutil/programmer.cpp
+	src/flashutil/debug.c
+	src/flashutil/main.cpp
 )
 
 add_executable(flash-util

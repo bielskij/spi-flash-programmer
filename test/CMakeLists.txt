@@ -40,6 +40,7 @@ target_include_directories(unit_tests
 		include
 		../common/include
 		../firmware/common/include
+		../flashutil/include
 )
 
 target_link_libraries(unit_tests

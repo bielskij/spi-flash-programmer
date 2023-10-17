@@ -7,8 +7,8 @@
 
 #include <stdexcept>
 
-#include "flash/registry.h"
-#include "flash/builder.h"
+#include "flashutil/flash/registry.h"
+#include "flashutil/flash/builder.h"
 
 
 FlashRegistry::FlashRegistry() {

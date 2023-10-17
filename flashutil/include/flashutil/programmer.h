@@ -27,7 +27,8 @@ class Programmer {
 		void eraseSectorByAddress(uint32_t addres, bool skipIfErased);
 		void eraseSectorByNumber(int sectorNo, bool skipIfErased);
 
-		static FlashRegistry &getRegistry();
+		static const FlashRegistry &getRegistry();
+		const Flash &getFlashInfo() const;
 
 	private:
 		void verifyFlashInfoAreaByAddress(uint32_t address, size_t size, size_t alignment);

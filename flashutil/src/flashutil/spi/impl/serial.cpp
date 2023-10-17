@@ -5,13 +5,13 @@
 #include "common/protocol/request.h"
 #include "common/protocol/response.h"
 
-#include "exception.h"
+#include "flashutil/exception.h"
 
 #include "serial.h"
 #include "serial/serial.h"
 
 //#define DEBUG 1
-#include "debug.h"
+#include "flashutil/debug.h"
 
 
 #define TIMEOUT_MS 1000

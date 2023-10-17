@@ -5,7 +5,7 @@
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#include "flash.h"
+#include "flashutil/flash.h"
 
 
 Flash::Flash() {
@@ -14,6 +14,7 @@ Flash::Flash() {
 	this->sectorSize  = 0;
 	this->sectorCount = 0;
 	this->pageSize    = 0;
+	this->pageCount   = 0;
 	this->protectMask = 0;
 }
 

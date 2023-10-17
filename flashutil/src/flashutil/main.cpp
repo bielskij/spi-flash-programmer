@@ -22,82 +22,98 @@
 
 #include <boost/program_options.hpp>
 
-#include "spi.h"
-#include "spi/creator.h"
-#include "exception.h"
-#include "debug.h"
+#include "flashutil/exception.h"
+#include "flashutil/programmer.h"
+
+#include "flashutil/flash/builder.h"
+
+#include "flashutil/spi.h"
+#include "flashutil/spi/creator.h"
+
+#include "flashutil/debug.h"
 
 
-#define WRITE_WAIT_TIMEOUT_MS 5000
+namespace po = boost::program_options;
+
+#define OPT_VERBOSE "verbose"
+#define OPT_HELP    "help"
+#define OPT_SERIAL  "serial"
+#define OPT_OUTPUT  "output"
+#define OPT_INPUT   "input"
+#define OPT_BAUD    "serial-baud"
+
+#define OPT_READ         "read"
+#define OPT_READ_BLOCK   "read-block"
+#define OPT_READ_SECTOR  "read-sector"
+
+#define OPT_ERASE        "erase"
+#define OPT_ERASE_BLOCK  "erase-block"
+#define OPT_ERASE_SECTOR "erase-sector"
+
+#define OPT_WRITE        "write"
+#define OPT_WRITE_BLOCK  "write-block"
+#define OPT_WRITE_SECTOR "write-sector"
+
+#define OPT_VERIFY       "verify"
+#define OPT_UNPROTECT    "unprotect"
+
+#define OPT_FLASH_DESC         "flash-geometry"
+#define OPT_OMIT_REDUNDANT_OPS "no-redudant-cycles"
 
 
-typedef struct _SpiFlashDevice {
-	std::string            name;
-	std::array<uint8_t, 5> id;
-	char                   idLen;
-	size_t                 blockSize;
-	size_t                 blockCount;
-	size_t                 sectorSize;
-	size_t                 sectorCount;
-	size_t                 pageSize;
-	uint8_t                protectMask;
-} SpiFlashDevice;
+struct Parameters {
+	bool help;
 
+	std::ofstream outpuFile;
+	std::ifstream inputFile;
+	std::string   serialPort;
 
-#define INFO(_jedec_id, _ext_id, _block_size, _n_blocks, _sector_size, _n_sectors, _protectMask) \
-		.id = {                                                        \
-			((_jedec_id) >> 16) & 0xff,                                \
-			((_jedec_id) >> 8) & 0xff,                                 \
-			(_jedec_id) & 0xff,                                        \
-			((_ext_id) >> 8) & 0xff,                                   \
-			(_ext_id) & 0xff,                                          \
-		},                                                             \
-		.idLen       = (!(_jedec_id) ? 0 : (3 + ((_ext_id) ? 2 : 0))), \
-		.blockSize   = (_block_size),                                  \
-		.blockCount  = (_n_blocks),                                    \
-		.sectorSize  = (_sector_size),                                 \
-		.sectorCount = (_n_sectors),                                   \
-		.pageSize    = 256,                                            \
-		.protectMask = _protectMask,
+	std::ostream *outFd;
+	std::istream *inFd;
 
-#define KB(_x)(1024 * _x)
+	int baud;
+	int idx;
 
-static const SpiFlashDevice flashDevices[] = {
-	{
-		"Macronix MX25L2026E/MX25l2005A",
-		INFO(0xc22012, 0, KB(64), 4, KB(4), 64, 0x8c)
-	},
-	{
-		"Macronix MX25V16066",
-		INFO(0xc22015, 0, KB(64), 32, KB(4), 512, 0xbc)
-	},
-	{
-		"Winbond W25Q32",
-		INFO(0xef4016, 0, KB(64), 64, KB(4), 1024, 0xfc)
-	},
-	{
-		"GigaDevice W25Q80",
-		INFO(0xc84014, 0, KB(64), 16, KB(4), 255, 0x7c)
+	Flash flashGeometry;
+
+	bool read;
+	bool readBlock;
+	bool readSector;
+
+	bool erase;
+	bool eraseBlock;
+	bool eraseSector;
+
+	bool write;
+	bool writeBlock;
+	bool writeSector;
+
+	bool verify;
+
+	bool unprotect;
+	bool omitRedundantOps;
+
+	Parameters() {
+		this->outFd = nullptr;
+		this->inFd  = nullptr;
+
+		this->help             = false;
+		this->baud             = 500000;
+		this->idx              = -1;
+		this->read             = false;
+		this->readBlock        = false;
+		this->readSector       = false;
+		this->erase            = false;
+		this->eraseBlock       = false;
+		this->eraseSector      = false;
+		this->write            = false;
+		this->writeBlock       = false;
+		this->writeSector      = false;
+		this->verify           = false;
+		this->unprotect        = false;
+		this->omitRedundantOps = false;
 	}
 };
-
-static const int flashDevicesCount = sizeof(flashDevices) / sizeof(flashDevices[0]);
-
-
-static SpiFlashDevice unknownDevice = {
-	"Unknown SPI flash chip",
-
-	INFO(0, 0, 0, 0, 0, 0, 0)
-};
-
-
-static std::unique_ptr<Spi> spiDev;
-
-
-typedef struct _SpiFlashInfo {
-	uint8_t manufacturerId;
-	uint8_t deviceId[2];
-} SpiFlashInfo;
 
 
 static std::ifstream::pos_type _fileSize(const char* filename) {
@@ -106,33 +122,7 @@ static std::ifstream::pos_type _fileSize(const char* filename) {
 	return in.tellg();
 }
 
-
-static void _flashCmdGetInfo(SpiFlashInfo *info) {
-	Spi::Messages msgs;
-
-	{
-		auto &msg = msgs.add();
-
-		msg.send()
-			.byte(0x9f);
-
-		msg.recv()
-			.skip(1)
-			.bytes(3);
-	}
-
-	spiDev->transfer(msgs);
-
-	{
-		auto &recv = msgs.at(0).recv();
-
-		info->manufacturerId = recv.at(0);
-		info->deviceId[0]    = recv.at(1);
-		info->deviceId[1]    = recv.at(2);
-	}
-}
-
-
+#if 0
 typedef struct _SpiFlashStatus {
 	bool writeEnableLatch;
 	bool writeInProgress;
@@ -279,94 +269,6 @@ static void _flashCmdPageWrite(uint32_t address, uint8_t *buffer, size_t bufferS
 	spiDev->transfer(msgs);
 }
 
-
-struct Parameters {
-	bool help;
-
-	std::ofstream outpuFile;
-	std::ifstream inputFile;
-	std::string   serialPort;
-
-	std::ostream *outFd;
-	std::istream *inFd;
-
-	int baud;
-	int idx;
-
-	bool read;
-	bool readBlock;
-	bool readSector;
-
-	bool erase;
-	bool eraseBlock;
-	bool eraseSector;
-
-	bool write;
-	bool writeBlock;
-	bool writeSector;
-
-	bool verify;
-
-	bool unprotect;
-	bool omitRedundantOps;
-
-	Parameters() {
-		this->outFd = nullptr;
-		this->inFd  = nullptr;
-
-		this->help             = false;
-		this->baud             = 500000;
-		this->idx              = -1;
-		this->read             = false;
-		this->readBlock        = false;
-		this->readSector       = false;
-		this->erase            = false;
-		this->eraseBlock       = false;
-		this->eraseSector      = false;
-		this->write            = false;
-		this->writeBlock       = false;
-		this->writeSector      = false;
-		this->verify           = false;
-		this->unprotect        = false;
-		this->omitRedundantOps = false;
-	}
-};
-
-
-
-namespace po = boost::program_options;
-
-#define OPT_VERBOSE "verbose"
-#define OPT_HELP    "help"
-#define OPT_SERIAL  "serial"
-#define OPT_OUTPUT  "output"
-#define OPT_INPUT   "input"
-#define OPT_BAUD    "serial-baud"
-
-#define OPT_READ       "read"
-#define OPT_READ_BLOCK "read-block"
-#define OPT_READ_SECTOR  "read-sector"
-
-#define OPT_ERASE        "erase"
-#define OPT_ERASE_BLOCK  "erase-block"
-#define OPT_ERASE_SECTOR "erase-sector"
-
-#define OPT_WRITE        "write"
-#define OPT_WRITE_BLOCK  "write-block"
-#define OPT_WRITE_SECTOR "write-sector"
-
-#define OPT_VERIFY       "verify"
-#define OPT_UNPROTECT    "unprotect"
-
-#define OPT_FLASH_DESC "flash-geometry"
-#define OPT_OMIT_REDUNDANT_OPS "no-redudant-cycles"
-
-
-static void _usage(const po::options_description &opts) {
-	std::cout << opts << std::endl;
-
-	exit(1);
-}
 
 
 class ChipSelector {
@@ -588,6 +490,14 @@ static void _doWriteFromStream(uint32_t address, size_t size, const SpiFlashDevi
 	}
 }
 
+#endif
+
+static void _usage(const po::options_description &opts) {
+	std::cout << opts << std::endl;
+
+	exit(1);
+}
+
 
 int main(int argc, char *argv[]) {
 	int ret = 0;
@@ -746,25 +656,64 @@ int main(int argc, char *argv[]) {
 					_usage(opDesc);
 				}
 
-				unknownDevice.blockCount  = blockCount;
-				unknownDevice.blockSize   = blockSize;
-				unknownDevice.sectorCount = sectorCount;
-				unknownDevice.sectorSize  = sectorSize;
-				unknownDevice.protectMask = unprotectMask;
+				{
+					FlashBuilder builder;
 
-				if (blockCount * blockSize != sectorCount * sectorSize) {
-					throw_Exception("Invalid flash-geometry, flash size calculated from blocks/sectors differs!");
+					builder
+						.setName("Custom")
+						.setBlockCount(blockCount)
+						.setBlockSize(blockSize)
+						.setSectorCount(sectorCount)
+						.setSectorSize(sectorSize)
+						.setProtectMask(unprotectMask);
+
+					params.flashGeometry = builder.build();
 				}
 			}
 		}
 
 		try {
+			std::unique_ptr<Spi>        spi;
+			std::unique_ptr<Programmer> programmer;
+
 			{
 				SpiCreator creator;
 
-				spiDev = creator.createSerialSpi(params.serialPort, params.baud);
+				spi = creator.createSerialSpi(params.serialPort, params.baud);
 			}
 
+			programmer = std::make_unique<Programmer>(spi.get());
+
+			programmer->begin();
+			{
+				Flash flashInfo;
+
+				{
+					const auto &detectedFlashInfo = programmer->getFlashInfo();
+
+					if (detectedFlashInfo.getSize() != 0) {
+						flashInfo = detectedFlashInfo;
+
+					} else {
+						flashInfo = params.flashGeometry;
+
+						flashInfo.setId(detectedFlashInfo.getId());
+					}
+				}
+
+				if (! flashInfo.isValid()) {
+					throw_Exception("No flash device detected!");
+				}
+
+				PRINTFLN(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdB",
+					flashInfo.getName().c_str(), flashInfo.getId()[0], flashInfo.getId()[1], flashInfo.getId()[2],
+					flashInfo.getSize(), flashInfo.getBlockCount(), flashInfo.getBlockSize() / 1024,
+					flashInfo.getSectorCount(), flashInfo.getSectorSize()
+				));
+			}
+			programmer->end();
+
+#if 0
 			{
 				const SpiFlashDevice *dev = NULL;
 
@@ -955,6 +904,7 @@ int main(int argc, char *argv[]) {
 					}
 				}
 			}
+#endif
 		} catch (const std::exception &ex) {
 			PRINTFLN(("Got exception: %s", ex.what()));
 

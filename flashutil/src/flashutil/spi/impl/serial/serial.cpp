@@ -8,10 +8,10 @@
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/bind.hpp>
 
-#include "exception.h"
-
 #include "serial.h"
-#include "debug.h"
+
+#include "flashutil/exception.h"
+#include "flashutil/debug.h"
 
 
 enum class Result {

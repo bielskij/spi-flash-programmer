@@ -1,4 +1,4 @@
-#include "debug.h"
+#include "flashutil/debug.h"
 
 
 void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength, uint32_t offset) {

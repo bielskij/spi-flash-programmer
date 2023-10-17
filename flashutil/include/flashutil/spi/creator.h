@@ -10,7 +10,7 @@
 
 #include <memory>
 
-#include "spi.h"
+#include "flashutil/spi.h"
 
 
 class SpiCreator {
