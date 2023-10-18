@@ -1,7 +1,9 @@
 #include <cstring>
+#include <functional>
 
 #include "common/crc8.h"
 #include "common/protocol.h"
+#include "common/protocol/packet.h"
 #include "common/protocol/request.h"
 #include "common/protocol/response.h"
 
@@ -43,7 +45,9 @@ struct SerialSpi::Impl {
 	uint8_t                 id;
 	Capabilities            capabilities;
 
-	Impl(Serial &serial) {
+	std::vector<uint8_t> packetBuffer;
+
+	Impl(Serial &serial) : packetBuffer(32) {
 		this->serial.reset(new SerialProxy(serial));
 
 		this->init(true);
@@ -100,7 +104,18 @@ struct SerialSpi::Impl {
 
 
 	void chipSelect(bool select) {
-		this->spiTransfer(nullptr, 0, nullptr, 0, 0, select ? PROTO_SPI_TRANSFER_FLAG_KEEP_CS : 0);
+		ProtoRes response;
+
+		this->executeCmd(PROTO_CMD_SPI_TRANSFER, [select](ProtoReq &req) {
+			ProtoReqTransfer &t = req.request.transfer;
+
+			t.flags        = select ? PROTO_SPI_TRANSFER_FLAG_KEEP_CS : 0;
+			t.rxBufferSize = 0;
+			t.rxSkipSize   = 0;
+			t.txBuffer     = nullptr;
+			t.txBufferSize = 0;
+
+		}, response, TIMEOUT_MS);
 	}
 
 
@@ -252,27 +267,72 @@ struct SerialSpi::Impl {
 		return this->capabilities;
 	}
 
+	void executeCmd(uint8_t cmd, std::function<void(ProtoReq &)> requestSetupCallback, ProtoRes &response, int timeout) {
+		ProtoPkt packet;
+
+		{
+			ProtoReq request;
+
+			proto_req_init(&request, cmd, ++this->id);
+
+			proto_pkt_init(
+				&packet,
+				this->packetBuffer.data(),
+				this->packetBuffer.size(),
+				request.cmd,
+				request.id,
+				proto_req_getPayloadSize(&request)
+			);
+
+			proto_req_assign(&request, packet.payload, packet.payloadSize);
+			if (requestSetupCallback) {
+				requestSetupCallback(request);
+			}
+			proto_req_encode(&request, packet.payload, packet.payloadSize);
+		}
+
+		this->serial->write(packetBuffer.data(), proto_pkt_encode(&packet), TIMEOUT_MS);
+
+		{
+			ProtoPktDes decoder;
+
+			proto_pkt_dec_setup(&decoder, this->packetBuffer.data(), this->packetBuffer.size());
+
+			{
+				uint8_t decRet;
+
+				do {
+					uint8_t byte;
+
+					this->serial->read(&byte, 1, TIMEOUT_MS);
+
+					decRet = proto_pkt_dec_putByte(&decoder, byte, &packet);
+
+					if (decRet != PROTO_PKT_DES_RET_IDLE) {
+						if (PROTO_PKT_DES_RET_GET_ERROR_CODE(decRet) != PROTO_NO_ERROR) {
+							throw_Exception("Protocol error! " + PROTO_PKT_DES_RET_GET_ERROR_CODE(decRet));
+						}
+
+						if (packet.id != this->id) {
+							throw_Exception("Protocol error! ID does not match!");
+						}
+
+						proto_res_init(&response, cmd, packet.code, packet.id);
+
+						proto_res_decode(&response, packet.payload, packet.payloadSize);
+						proto_res_assign(&response, packet.payload, packet.payloadSize);
+					}
+				} while (decRet == PROTO_PKT_DES_RET_IDLE);
+			}
+		}
+	}
 
 	void attach() {
-		ProtoPkt packet;
-		ProtoReq req;
+		ProtoRes response;
 
-		const uint16_t packetBufferSize = 32;
-		uint8_t        packetBuffer[packetBufferSize];
-		uint16_t       packetBufferWritten;
+		executeCmd(PROTO_CMD_GET_INFO, {}, response, TIMEOUT_MS);
 
-		proto_req_init(&req, PROTO_CMD_GET_INFO, this->id++);
-		proto_pkt_init(&packet, packetBuffer, packetBufferSize, req.cmd, req.id, proto_req_getPayloadSize(&req));
-
-		proto_req_assign(&req, packet.payload, packet.payloadSize);
-		{
-
-		}
-		proto_req_encode(&req, packet.payload, packet.payloadSize);
-
-		packetBufferWritten = proto_pkt_encode(&packet);
-
-		DBG(("To send: %u bytes", packetBufferWritten));
+		DBG(("version %u.%u, payload size: %u", response.response.getInfo.version.major, response.response.getInfo.version.minor, response.response.getInfo.payloadSize));
 
 		// Be sure CS pin is released.
 		this->chipSelect(false);
