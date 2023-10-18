@@ -28,6 +28,15 @@ add_executable(unit_tests
 	
 	../firmware/common/src/firmware/programmer.c
 	
+	../flashutil/src/flashutil/flash.cpp
+	../flashutil/src/flashutil/flash/registry.cpp
+	../flashutil/src/flashutil/entryPoint.cpp
+	../flashutil/src/flashutil/programmer.cpp
+	../flashutil/src/flashutil/spi.cpp
+	../flashutil/src/flashutil/spi/creator.cpp
+	../flashutil/src/flashutil/spi/impl/serial.cpp
+	../flashutil/src/flashutil/spi/impl/serial/serial.cpp
+	
 	${TEST_FILES}
 )
 

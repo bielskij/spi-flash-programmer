@@ -11,7 +11,7 @@
 #include <memory>
 
 #include "flashutil/spi.h"
-
+#include "flashutil/spi/serial.h"
 
 class SpiCreator {
 	public:
@@ -19,6 +19,7 @@ class SpiCreator {
 		virtual ~SpiCreator();
 
 		std::unique_ptr<Spi> createSerialSpi(const std::string &path, int baudrate);
+		std::unique_ptr<Spi> createSerialSpi(Serial &serial);
 };
 
 

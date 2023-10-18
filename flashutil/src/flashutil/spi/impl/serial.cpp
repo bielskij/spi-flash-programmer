@@ -10,7 +10,7 @@
 #include "serial.h"
 #include "serial/serial.h"
 
-//#define DEBUG 1
+#define DEBUG 1
 #include "flashutil/debug.h"
 
 
@@ -19,20 +19,45 @@
 #define TRANSFER_DATA_BLOCK_SIZE ((size_t) 251)
 
 
+struct SerialProxy : public Serial {
+	public:
+		SerialProxy(Serial &serial) : _serial(serial) {
+		}
+
+		virtual void write(void *buffer, std::size_t bufferSize, int timeoutMs) override {
+			this->_serial.write(buffer, bufferSize, timeoutMs);
+		}
+
+		virtual void read(void *buffer, std::size_t bufferSize, int timeoutMs) override {
+			this->_serial.read(buffer, bufferSize, timeoutMs);
+		}
+
+	private:
+		Serial &_serial;
+};
+
+
 struct SerialSpi::Impl {
 	std::unique_ptr<Serial> serial;
 	Config                  config;
 	uint8_t                 id;
 	Capabilities            capabilities;
-	bool                    attached;
 
-	Impl(const std::string &path, int baudrate) {
-		this->id       = 0;
-		this->attached = false;
+	Impl(Serial &serial) {
+		this->serial.reset(new SerialProxy(serial));
 
-		this->serial.reset(new Serial(path, baudrate));
+		this->init(true);
 	}
 
+	Impl(const std::string &path, int baudrate) {
+		this->serial.reset(new HwSerial(path, baudrate));
+
+		this->init(false);
+	}
+
+	void init(bool attached) {
+		this->id = 0;
+	}
 
 	void transfer(Messages &msgs) {
 		for (size_t i = 0; i < msgs.count(); i++) {
@@ -229,6 +254,26 @@ struct SerialSpi::Impl {
 
 
 	void attach() {
+		ProtoPkt packet;
+		ProtoReq req;
+
+		const uint16_t packetBufferSize = 32;
+		uint8_t        packetBuffer[packetBufferSize];
+		uint16_t       packetBufferWritten;
+
+		proto_req_init(&req, PROTO_CMD_GET_INFO, this->id++);
+		proto_pkt_init(&packet, packetBuffer, packetBufferSize, req.cmd, req.id, proto_req_getPayloadSize(&req));
+
+		proto_req_assign(&req, packet.payload, packet.payloadSize);
+		{
+
+		}
+		proto_req_encode(&req, packet.payload, packet.payloadSize);
+
+		packetBufferWritten = proto_pkt_encode(&packet);
+
+		DBG(("To send: %u bytes", packetBufferWritten));
+
 		// Be sure CS pin is released.
 		this->chipSelect(false);
 	}
@@ -243,6 +288,11 @@ struct SerialSpi::Impl {
 
 SerialSpi::SerialSpi(const std::string &path, int baudrate) {
 	this->self.reset(new SerialSpi::Impl(path, baudrate));
+}
+
+
+SerialSpi::SerialSpi(Serial &serial) {
+	this->self.reset(new SerialSpi::Impl(serial));
 }
 
 

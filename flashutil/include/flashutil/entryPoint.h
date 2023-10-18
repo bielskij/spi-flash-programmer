@@ -57,6 +57,7 @@ namespace flashutil {
 
 		public:
 			static int call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const std::vector<Parameters> &parameters);
+			static int call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const Parameters &parameters);
 
 		private:
 			EntryPoint();

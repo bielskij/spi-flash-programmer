@@ -26,6 +26,8 @@ Programmer::Programmer(Spi &spiDev, const FlashRegistry *registry) : _spi(spiDev
 void Programmer::begin(const Flash *defaultGeometry) {
 	auto &f = this->_flashInfo;
 
+	this->_spi.attach();
+
 	{
 		std::vector<uint8_t> id;
 
@@ -64,6 +66,8 @@ void Programmer::begin(const Flash *defaultGeometry) {
 
 
 void Programmer::end() {
+	this->_spi.detach();
+
 	this->_flashInfo = Flash();
 }
 

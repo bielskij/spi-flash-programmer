@@ -11,14 +11,15 @@
 #include <memory>
 #include <string>
 
-class Serial {
+#include "flashutil/spi/serial.h"
+
+class HwSerial : public Serial {
 	public:
-		Serial(const std::string &serialPath, int baud);
-		virtual ~Serial();
+		HwSerial(const std::string &serialPath, int baud);
 
 	public:
-		void write(void *buffer, std::size_t bufferSize, int timeoutMs);
-		void read(void *buffer, std::size_t bufferSize, int timeoutMs);
+		void write(void *buffer, std::size_t bufferSize, int timeoutMs) override;
+		void read(void *buffer, std::size_t bufferSize, int timeoutMs) override;
 
 	private:
 		void _flush();

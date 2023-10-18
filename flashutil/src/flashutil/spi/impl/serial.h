@@ -12,9 +12,11 @@
 #include <memory>
 
 #include "flashutil/spi.h"
+#include "flashutil/spi/serial.h"
 
 class SerialSpi : public Spi {
 	public:
+		SerialSpi(Serial &serial);
 		SerialSpi(const std::string &path, int baudrate);
 		~SerialSpi();
 

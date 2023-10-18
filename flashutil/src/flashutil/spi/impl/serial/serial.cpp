@@ -22,7 +22,7 @@ enum class Result {
 };
 
 
-struct Serial::Impl {
+struct HwSerial::Impl {
 	boost::asio::io_service  service;
 	boost::asio::serial_port serial;
 
@@ -60,7 +60,7 @@ struct Serial::Impl {
 };
 
 
-Serial::Serial(const std::string &serialPath, int baud) {
+HwSerial::HwSerial(const std::string &serialPath, int baud) {
 	this->self.reset(new Impl(serialPath));
 
 	PRINTFLN(("Device %s opened!", serialPath.c_str()));
@@ -103,19 +103,14 @@ Serial::Serial(const std::string &serialPath, int baud) {
 }
 
 
-Serial::~Serial() {
-
-}
-
-
-void Serial::write(void *buffer, std::size_t bufferSize, int timeoutMs) {
+void HwSerial::write(void *buffer, std::size_t bufferSize, int timeoutMs) {
 	if (self->serial.write_some(boost::asio::buffer(buffer, bufferSize)) != bufferSize) {
 		throw_Exception("Cannot write data to the output!");
 	}
 }
 
 
-void Serial::_flush() {
+void HwSerial::_flush() {
 #if defined(__unix__)
 	int fd = self->serial.lowest_layer().native_handle();
 
@@ -124,7 +119,7 @@ void Serial::_flush() {
 }
 
 
-void Serial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
+void HwSerial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 	self->service.restart();
 
 	if (timeoutMs != 0) {

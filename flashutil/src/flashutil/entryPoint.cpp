@@ -66,6 +66,11 @@ static OperationHandler _getHandler(const EntryPoint::Parameters &params) {
 }
 
 
+int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const Parameters &parameters) {
+	return call(spi, registry, flashGeometry, std::vector<Parameters>({ parameters }));
+}
+
+
 int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const std::vector<Parameters> &parameters) {
 	int ret = RC_SUCCESS;
 
