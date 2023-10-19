@@ -64,6 +64,8 @@ struct SerialSpi::Impl {
 	}
 
 	void transfer(Messages &msgs) {
+		ProtoPkt pkt;
+
 		for (size_t i = 0; i < msgs.count(); i++) {
 			auto &msg = msgs.at(i);
 
@@ -80,25 +82,36 @@ struct SerialSpi::Impl {
 				memset(rxBuffer, 0, rxSize);
 			}
 
-			this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, rxSkip, 0);
+			this->executeCmd(
+				PROTO_CMD_SPI_TRANSFER,
+				[](ProtoReq &request) {
+					request.request.transfer.txBufferSize
+				},
+				[](ProtoRes &response) {
 
-			if (msg.recv().getSkipMap().size() > 1) {
-				throw std::runtime_error("More than 1 skip operation in a single message is not yet supported!");
-			}
+				},
+				TIMEOUT_MS
+			);
 
-			{
-				std::size_t dstOffset = 0;
-
-				auto skipIndex = msg.recv().getSkipMap();
-
-				for (int i = 0; i < rxSize; i++) {
-					if (skipIndex.find(i) != skipIndex.end()) {
-						continue;
-					}
-
-					msg.recv().data()[dstOffset++] = rxBuffer[i];
-				}
-			}
+//			this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, rxSkip, 0);
+//
+//			if (msg.recv().getSkipMap().size() > 1) {
+//				throw std::runtime_error("More than 1 skip operation in a single message is not yet supported!");
+//			}
+//
+//			{
+//				std::size_t dstOffset = 0;
+//
+//				auto skipIndex = msg.recv().getSkipMap();
+//
+//				for (int i = 0; i < rxSize; i++) {
+//					if (skipIndex.find(i) != skipIndex.end()) {
+//						continue;
+//					}
+//
+//					msg.recv().data()[dstOffset++] = rxBuffer[i];
+//				}
+//			}
 		}
 	}
 
@@ -115,7 +128,7 @@ struct SerialSpi::Impl {
 			t.txBuffer     = nullptr;
 			t.txBufferSize = 0;
 
-		}, response, TIMEOUT_MS);
+		}, {}, TIMEOUT_MS);
 	}
 
 
@@ -128,152 +141,27 @@ struct SerialSpi::Impl {
 		this->config = config;
 	}
 
-
-	void cmdExecute(uint8_t cmd, uint8_t *data, size_t dataSize, uint8_t *response, size_t responseSize) {
-//		size_t triesLeft = this->config.getRetransmissions();
-//		bool   success   = false;
-
-		DBG(("CALL cmd: %d (%02x), %p, %zd, %p, %zd", cmd, cmd, data, dataSize, response, responseSize));
-
-//		do {
-//			if (triesLeft) {
-//				triesLeft--;
-//			}
-//
-//			try {
-	#if 0
-				// Send
-				{
-					uint16_t txDataSize = 4 + dataSize + 1;
-					uint8_t txData[txDataSize];
-
-					txData[0] = PROTO_SYNC_BYTE;
-					txData[1] = cmd;
-					txData[2] = dataSize >> 8;
-					txData[3] = dataSize;
-
-					if (dataSize) {
-						memcpy(txData + 4, data, dataSize);
-					}
-
-					txData[txDataSize - 1] = crc8_get(txData, txDataSize - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
-
-			//		debug_dumpBuffer(txData, txDataSize, 32, 0);
-
-					self->serial->write(txData, txDataSize, TIMEOUT_MS);
-				}
-
-				// Receive
-				{
-					uint8_t rxHeader[4];
-
-					self->serial->read(rxHeader, sizeof(rxHeader), TIMEOUT_MS);
-
-					// Sync
-					if (rxHeader[0] != PROTO_SYNC_BYTE) {
-						throw_Exception("Received byte is not a sync byte!");
-					}
-
-					{
-						size_t  rxDataSize = ((rxHeader[2] << 8) | rxHeader[3]) + 1; // room for crc
-						uint8_t rxData[rxDataSize];
-
-						self->serial->read(rxData, rxDataSize, TIMEOUT_MS);
-
-						DBG(("rxDataSize: %zd", rxDataSize));
-
-						// Check CRC
-						{
-							uint8_t crc = PROTO_CRC8_START;
-
-							crc = crc8_get(rxHeader, sizeof(rxHeader), PROTO_CRC8_POLY, crc);
-							crc = crc8_get(rxData, rxDataSize - 1, PROTO_CRC8_POLY, crc);
-
-							if (crc != rxData[rxDataSize - 1]) {
-								throw_Exception("CRC mismatch!");
-							}
-						}
-
-						if (response) {
-							size_t toCopy = std::min(responseSize, rxDataSize - 1);
-
-							if (toCopy) {
-								memcpy(response, rxData, toCopy);
-							}
-						}
-					}
-
-					{
-						uint8_t code = rxHeader[1];
-
-						if (code != PROTO_NO_ERROR) {
-							throw_Exception("Received error! " + std::to_string(code));
-						}
-					}
-				}
-	#endif
-//				success = true;
-//			} catch (const Exception &ex) {
-//	//			PRINTFLN(("Got exception! %s - %zd tries left", ex.what(), triesLeft));
-//
-//				if (triesLeft == 0) {
-//					throw;
-//				}
-//			}
-//		} while (! success);
-
-	//	debug_dumpBuffer(response, responseSize, 32, 0);
-	}
-
-
-	void spiTransfer(uint8_t *tx, uint16_t txSize, uint8_t *rx, uint16_t rxSize, uint16_t rxSkip, uint8_t flags) {
-		size_t totalSize      = std::max(txSize, rxSize);
-		size_t rxProcessed    = 0;
-		size_t txProcessed    = 0;
-		size_t totalProcessed = 0;
-
-		const size_t dataMaxSize = TRANSFER_DATA_BLOCK_SIZE - 4;
-
-		while (totalProcessed != totalSize) {
-			size_t turnSize = std::min(dataMaxSize, totalSize - totalProcessed);
-
-			size_t turnTx = std::min(turnSize, txSize - txProcessed);
-			size_t turnRx = std::min(turnSize, rxSize - rxProcessed);
-
-			size_t  buffSize = 4 + turnTx;
-			uint8_t buff[buffSize];
-
-			buff[0] = turnTx >> 8;
-			buff[1] = turnTx;
-			buff[2] = turnRx >> 8;
-			buff[3] = turnRx;
-
-			if (turnTx) {
-				memcpy(&buff[4], tx + txProcessed, turnTx);
-			}
-
-			this->cmdExecute(PROTO_CMD_SPI_TRANSFER, buff, buffSize, rx + rxProcessed, turnRx);
-
-			txProcessed += turnTx;
-			rxProcessed += turnRx;
-
-			totalProcessed += turnSize;
-		}
-
-		DBG(("totalSize: %zd, txProcessed: %zd, rxProcessed: %zd, totalPorcessed: %zd", totalSize, txProcessed, rxProcessed, totalProcessed));
-	}
-
 	const Capabilities &getCapabilities() const {
 		return this->capabilities;
 	}
 
-	void executeCmd(uint8_t cmd, std::function<void(ProtoReq &)> requestSetupCallback, ProtoRes &response, int timeout) {
+	void executeCmd(
+		uint8_t cmd,
+		std::function<void(ProtoReq &)> requestPrepareCallback,
+		std::function<void(ProtoReq &)> requestFillCallback,
+		std::function<void(ProtoRes &)> responseDataCallback,
+		int timeout
+	) {
 		ProtoPkt packet;
 
 		{
 			ProtoReq request;
 
 			proto_req_init(&request, cmd, ++this->id);
+
+			if (requestPrepareCallback) {
+				requestPrepareCallback(request);
+			}
 
 			proto_pkt_init(
 				&packet,
@@ -285,8 +173,10 @@ struct SerialSpi::Impl {
 			);
 
 			proto_req_assign(&request, packet.payload, packet.payloadSize);
-			if (requestSetupCallback) {
-				requestSetupCallback(request);
+			{
+				if (requestFillCallback) {
+					requestFillCallback(request);
+				}
 			}
 			proto_req_encode(&request, packet.payload, packet.payloadSize);
 		}
@@ -317,10 +207,18 @@ struct SerialSpi::Impl {
 							throw_Exception("Protocol error! ID does not match!");
 						}
 
-						proto_res_init(&response, cmd, packet.code, packet.id);
+						{
+							ProtoRes response;
 
-						proto_res_decode(&response, packet.payload, packet.payloadSize);
-						proto_res_assign(&response, packet.payload, packet.payloadSize);
+							proto_res_init(&response, cmd, packet.code, packet.id);
+
+							proto_res_decode(&response, packet.payload, packet.payloadSize);
+							proto_res_assign(&response, packet.payload, packet.payloadSize);
+
+							if (responseDataCallback) {
+								responseDataCallback(response);
+							}
+						}
 					}
 				} while (decRet == PROTO_PKT_DES_RET_IDLE);
 			}

@@ -35,7 +35,7 @@ uint16_t proto_req_getPayloadSize(ProtoReq *request) {
 			break;
 
 		default:
-			ret = false;
+			break;
 	}
 
 	return ret;

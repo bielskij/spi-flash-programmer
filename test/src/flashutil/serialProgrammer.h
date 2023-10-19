@@ -6,10 +6,10 @@
 #include "flashutil/flash.h"
 
 
-class SerialFlash : public Serial {
+class SerialProgrammer : public Serial {
 	public:
-		SerialFlash(const Flash &flashInfo, size_t transferSize);
-		virtual ~SerialFlash();
+		SerialProgrammer(const Flash &flashInfo, size_t transferSize);
+		virtual ~SerialProgrammer();
 
 		virtual void write(void *buffer, std::size_t bufferSize, int timeoutMs) override;
 		virtual void read(void *buffer, std::size_t bufferSize, int timeoutMs) override;

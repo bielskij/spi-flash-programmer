@@ -4,7 +4,7 @@
 #include "flashutil/programmer.h"
 #include "flashutil/entryPoint.h"
 
-#include "serialFlash.h"
+#include "serialProgrammer.h"
 
 #define PAGE_SIZE        (16)
 #define PAGE_COUNT       (32)
@@ -19,7 +19,7 @@
 
 #define PAYLOAD_SIZE 128
 
-static std::unique_ptr<SerialFlash> createSerial() {
+static std::unique_ptr<SerialProgrammer> createSerial() {
 	Flash flash;
 
 	flash.setBlockSize  (BLOCK_SIZE);
@@ -31,7 +31,7 @@ static std::unique_ptr<SerialFlash> createSerial() {
 
 	flash.setProtectMask(0x8c);
 
-	return std::make_unique<SerialFlash>(flash, PAYLOAD_SIZE);
+	return std::make_unique<SerialProgrammer>(flash, PAYLOAD_SIZE);
 }
 
 
