@@ -33,7 +33,6 @@ typedef struct _ProtoReqTransfer {
 
 typedef struct _ProtoReq {
 	uint8_t cmd;
-	uint8_t id;
 
 	union {
 		ProtoReqGetInfo  getInfo;
@@ -42,10 +41,10 @@ typedef struct _ProtoReq {
 } ProtoReq;
 
 
-void     proto_req_init  (ProtoReq *request, uint8_t cmd, uint8_t id);
-void     proto_req_assign(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
-uint16_t proto_req_encode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
-uint16_t proto_req_decode(ProtoReq *request, uint8_t *buffer, uint16_t bufferSize);
+void     proto_req_init  (ProtoReq *request, void *memory, uint16_t memorySize, uint8_t cmd);
+void     proto_req_assign(ProtoReq *request, void *memory, uint16_t memorySize);
+uint16_t proto_req_encode(ProtoReq *request, void *memory, uint16_t memorySize);
+uint16_t proto_req_decode(ProtoReq *request, void *memory, uint16_t memorySize);
 
 uint16_t proto_req_getPayloadSize(ProtoReq *request);
 

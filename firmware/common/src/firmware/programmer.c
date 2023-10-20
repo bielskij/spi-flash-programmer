@@ -26,6 +26,17 @@ void programmer_setup(
 }
 
 
+static void _sendError(Programmer *programmer, ProtoPkt *packet, ProtoRes *response, uint8_t errorCode) {
+	proto_pkt_init(packet, programmer->mem, programmer->memSize, packet->code, packet->id);
+	proto_res_init(response, packet->payload, packet->payloadSize, packet->code, errorCode);
+
+	proto_pkt_prepare(packet, programmer->mem, programmer->memSize, proto_res_getPayloadSize(response));
+
+	proto_res_assign(response, packet->payload, packet->payloadSize);
+	proto_res_encode(response, packet->payload, packet->payloadSize);
+}
+
+
 void programmer_putByte(Programmer *programmer, uint8_t byte) {
 	ProtoPkt packet;
 
@@ -34,29 +45,26 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 	if (ret != PROTO_PKT_DES_RET_IDLE) {
 		ProtoRes response;
 
-		if (PROTO_PKT_DES_RET_GET_ERROR_CODE(ret) != PROTO_NO_ERROR) {
-			proto_res_init(&response, packet.code, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), packet.id);
-
-			proto_pkt_init(
-				&packet,
-				programmer->mem,
-				programmer->memSize,
-				response.code,
-				response.id,
-				proto_res_getPayloadSize(&response)
-			);
-
-			proto_res_assign(&response, packet.payload, packet.payloadSize);
-			proto_res_encode(&response, packet.payload, packet.payloadSize);
-
-		} else {
+		do {
 			ProtoReq request;
 
-			proto_req_init  (&request, packet.code,    packet.id);
+			uint16_t packetMaxSize;
+
+			if (PROTO_PKT_DES_RET_GET_ERROR_CODE(ret) != PROTO_NO_ERROR) {
+				_sendError(programmer, &packet, &response, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret));
+				break;
+			}
+
+			// Parse, assign request to coming packet
+			proto_req_init  (&request, packet.payload, packet.payloadSize, packet.code);
 			proto_req_decode(&request, packet.payload, packet.payloadSize);
 			proto_req_assign(&request, packet.payload, packet.payloadSize);
 
-			proto_res_init(&response, request.cmd, PROTO_NO_ERROR, request.id);
+			// Start preparation of response
+			proto_pkt_init(&packet, programmer->mem, programmer->memSize, packet.code, packet.id);
+			proto_res_init(&response, packet.payload, packet.payloadSize, packet.code, PROTO_NO_ERROR);
+
+			packetMaxSize = packet.payloadSize;
 
 			switch (request.cmd) {
 				case PROTO_CMD_GET_INFO:
@@ -66,7 +74,7 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 						res->version.major = PROTO_VERSION_MAJOR;
 						res->version.minor = PROTO_VERSION_MINOR;
 
-						res->payloadSize = programmer->memSize - PROTO_FRAME_MIN_SIZE;
+						res->packetSize = packetMaxSize;
 					}
 					break;
 
@@ -74,47 +82,37 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 					{
 						ProtoResTransfer *res = &response.response.transfer;
 
-						res->rxBufferSize = request.request.transfer.rxBufferSize;
+						if (res->rxBufferSize < request.request.transfer.rxBufferSize) {
+							_sendError(programmer, &packet, &response, PROTO_ERROR_INVALID_MESSAGE);
+
+						} else {
+							res->rxBufferSize = request.request.transfer.rxBufferSize;
+						}
 					}
 					break;
 
 				default:
-					proto_res_init(&response, request.cmd, PROTO_ERROR_INVALID_CMD, request.id);
+					_sendError(programmer, &packet, &response, PROTO_ERROR_INVALID_CMD);
 					break;
 			}
 
-			proto_pkt_init(
-				&packet,
-				programmer->mem,
-				programmer->memSize,
-				response.code,
-				response.id,
-				proto_res_getPayloadSize(&response)
-			);
+			if (response.code != PROTO_NO_ERROR) {
+				break;
+			}
+
+			proto_pkt_prepare(&packet, programmer->mem, programmer->memSize, proto_res_getPayloadSize(&response));
 
 			proto_res_assign(&response, packet.payload, packet.payloadSize);
 			{
-				if (response.code == PROTO_NO_ERROR) {
-					programmer->requestCallback(&request, &response, programmer->callbackData);
-
-					if (response.code != PROTO_NO_ERROR) {
-						proto_pkt_init(
-							&packet,
-							programmer->mem,
-							programmer->memSize,
-							response.code,
-							response.id,
-							proto_res_getPayloadSize(&response)
-						);
-					}
-				}
+				programmer->requestCallback(&request, &response, programmer->callbackData);
 			}
 			proto_res_encode(&response, packet.payload, packet.payloadSize);
 
-			programmer->responseCallback(
-				programmer->mem, proto_pkt_encode(&packet), programmer->callbackData
-			);
-		}
+		} while (0);
+
+		programmer->responseCallback(
+			programmer->mem, proto_pkt_encode(&packet, programmer->mem, programmer->memSize), programmer->callbackData
+		);
 	}
 }
 

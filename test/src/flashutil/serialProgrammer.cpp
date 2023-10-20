@@ -155,9 +155,9 @@ class DummyFlash {
 		static std::map<uint8_t, CmdDescription> _initDescriptions() {
 			std::map<uint8_t, CmdDescription> ret;
 
-			ret[CMD_ERASE_CHIP]   = CmdDescription(0);
-			ret[CMD_ERASE_BLOCK]  = CmdDescription(3);
-			ret[CMD_ERASE_SECTOR] = CmdDescription(3);
+//			ret.insert(CMD_ERASE_CHIP,   CmdDescription(0));
+//			ret.insert(CMD_ERASE_BLOCK,  CmdDescription(3));
+//			ret.insert(CMD_ERASE_SECTOR, CmdDescription(3));
 
 			return ret;
 		}

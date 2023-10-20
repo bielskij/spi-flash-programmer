@@ -23,26 +23,46 @@ typedef enum _State {
 } State;
 
 
-bool proto_pkt_init(ProtoPkt *pkt, uint8_t *mem, uint16_t memSize, uint8_t code, uint8_t id, uint16_t payloadSize) {
-	bool ret = (mem != NULL) && (memSize > 0);
+uint16_t _getMaxPayloadSize(uint16_t memSize) {
+	uint8_t overhead = 3;
 
-	if (ret) {
-		pkt->code = code;
-		pkt->id   = id;
+	if (memSize <= overhead) {
+		return 0;
+	}
 
-		pkt->mem     = mem;
-		pkt->memSize = memSize;
+	if (proto_int_val_length_estimate(memSize - overhead) == 2) {
+		overhead++;
+	}
 
-		pkt->payloadSize = payloadSize;
-		if (pkt->payloadSize) {
-			pkt->payload = pkt->mem + 2 + proto_int_val_length_estimate(payloadSize);
+	return memSize - overhead;
+}
+
+
+void proto_pkt_init(ProtoPkt *pkt, void *mem, uint16_t memSize, uint8_t code, uint8_t id) {
+	pkt->code = code;
+	pkt->id   = id;
+
+	pkt->payloadSize = _getMaxPayloadSize(memSize);
+	pkt->payload     = NULL;
+}
+
+
+bool proto_pkt_prepare(ProtoPkt *pkt, void *mem, uint16_t memSize, uint16_t payloadSize) {
+	bool ret = true;
+
+	if (payloadSize != pkt->payloadSize) {
+		if (payloadSize) {
+			if (payloadSize > _getMaxPayloadSize(memSize)) {
+				ret = false;
+
+			} else {
+				pkt->payloadSize = payloadSize;
+				pkt->payload     = ((uint8_t *) mem) + 2 + proto_int_val_length_estimate(pkt->payloadSize);
+			}
 
 		} else {
-			pkt->payload = NULL;
-		}
-
-		if (pkt->payload + pkt->payloadSize > pkt->mem + pkt->memSize) {
-			ret = false;
+			pkt->payloadSize = 0;
+			pkt->payload     = NULL;
 		}
 	}
 
@@ -50,23 +70,19 @@ bool proto_pkt_init(ProtoPkt *pkt, uint8_t *mem, uint16_t memSize, uint8_t code,
 }
 
 
-uint16_t proto_pkt_encode(ProtoPkt *pkt) {
+uint16_t proto_pkt_encode(ProtoPkt *pkt, void *mem, uint16_t memSize) {
 	uint16_t ret = 0;
 
 	do {
-		pkt->mem[ret++] = PROTO_SYNC_NIBBLE | pkt->code;
-		pkt->mem[ret++] = pkt->id;
+		uint8_t *buff = (uint8_t *) mem;
 
-		proto_int_val_encode(pkt->payloadSize, pkt->mem + ret);
+		buff[ret++] = PROTO_SYNC_NIBBLE | pkt->code;
+		buff[ret++] = pkt->id;
 
-		if (pkt->payload) {
-			ret = (pkt->payload - pkt->mem) + pkt->payloadSize + 1;
+		ret += proto_int_val_encode(pkt->payloadSize, buff + ret);
+		ret += pkt->payloadSize;
 
-		} else {
-			ret = 2 + 1 + 1;
-		}
-
-		pkt->mem[ret - 1] = crc8_get(pkt->mem, ret - 1, PROTO_CRC8_POLY, PROTO_CRC8_START);
+		buff[ret++] = crc8_get(buff, ret, PROTO_CRC8_POLY, PROTO_CRC8_START);
 	} while (0);
 
 	return ret;

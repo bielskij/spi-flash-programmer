@@ -15,6 +15,8 @@
 extern "C" {
 #endif
 
+#define PROTO_INT_VAL_MAX 0x7fff
+
 uint8_t proto_int_val_length_estimate(uint16_t val);
 
 uint8_t proto_int_val_length_probe(uint8_t byte);

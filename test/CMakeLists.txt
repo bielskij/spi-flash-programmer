@@ -28,6 +28,7 @@ add_executable(unit_tests
 	
 	../firmware/common/src/firmware/programmer.c
 	
+	../flashutil/src/flashutil/debug.c
 	../flashutil/src/flashutil/flash.cpp
 	../flashutil/src/flashutil/flash/registry.cpp
 	../flashutil/src/flashutil/entryPoint.cpp

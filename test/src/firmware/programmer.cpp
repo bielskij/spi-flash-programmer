@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "common/protocol.h"
-
+#include "flashutil/debug.h"
 #include "firmware/programmer.h"
 
 
@@ -15,7 +15,7 @@ static void _deserializeResponse(uint8_t *buffer, uint16_t bufferSize, uint8_t c
 
 		auto ret = proto_pkt_dec_putByte(&des, buffer[i], &pkt);
 		if (ret != PROTO_PKT_DES_RET_IDLE) {
-			proto_res_init(&res, cmd, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret), pkt.id);
+			proto_res_init(&res, pkt.payload, pkt.payloadSize, cmd, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret));
 
 			proto_res_decode(&res, pkt.payload, pkt.payloadSize);
 			proto_res_assign(&res, pkt.payload, pkt.payloadSize);
@@ -30,7 +30,6 @@ static void _requestGetInfoCallback(ProtoReq *request, ProtoRes *response, void 
 	ASSERT_TRUE(data != NULL);
 
 	ASSERT_EQ(request->cmd, PROTO_CMD_GET_INFO);
-	ASSERT_EQ(request->id,  0x05);
 
 	*data |= (1 << 0);
 }
@@ -47,12 +46,11 @@ static void _responseGetInfoCallback(uint8_t *buffer, uint16_t bufferSize, void 
 		_deserializeResponse(buffer, bufferSize, PROTO_CMD_GET_INFO, res);
 
 		ASSERT_EQ(res.cmd,  PROTO_CMD_GET_INFO);
-		ASSERT_EQ(res.id,   0x5);
 		ASSERT_EQ(res.code, PROTO_NO_ERROR);
 
 		ASSERT_EQ(res.response.getInfo.version.major, PROTO_VERSION_MAJOR);
 		ASSERT_EQ(res.response.getInfo.version.minor, PROTO_VERSION_MINOR);
-		ASSERT_GT(res.response.getInfo.payloadSize,   0);
+		ASSERT_GT(res.response.getInfo.packetSize,   0);
 	}
 
 	*data |= (1 << 1);
@@ -60,7 +58,7 @@ static void _responseGetInfoCallback(uint8_t *buffer, uint16_t bufferSize, void 
 
 
 TEST(firmware_programmer, proto_getInfo) {
-	uint8_t buffer[1024];
+	std::vector<uint8_t> buffer(1024, 0);
 
 	{
 		Programmer prog;
@@ -68,33 +66,29 @@ TEST(firmware_programmer, proto_getInfo) {
 		uint8_t callbackData = 0;
 
 		programmer_setup(
-			&prog,
-			buffer,
-			sizeof(buffer),
-			_requestGetInfoCallback,
-			_responseGetInfoCallback,
-			&callbackData
+			&prog, buffer.data(), buffer.size(), _requestGetInfoCallback, _responseGetInfoCallback, &callbackData
 		);
 
 		{
-			uint8_t  reqBuffer[1024];
-			uint16_t reqWritten;
+			std::vector<uint8_t> reqBuffer(1024, 0);
+			uint16_t             reqWritten;
 
 			{
 				ProtoPkt pkt;
 
+				proto_pkt_init(&pkt, reqBuffer.data(), reqBuffer.size(), PROTO_CMD_GET_INFO, 0x05);
+
 				{
 					ProtoReq req;
 
-					proto_req_init(&req, PROTO_CMD_GET_INFO, 0x5);
-
-					proto_pkt_init(&pkt, reqBuffer, sizeof(reqBuffer), req.cmd, req.id, proto_req_getPayloadSize(&req));
-
+					proto_req_init  (&req, pkt.payload, pkt.payloadSize, pkt.code);
 					proto_req_assign(&req, pkt.payload, pkt.payloadSize);
 					proto_req_encode(&req, pkt.payload, pkt.payloadSize);
+
+					ASSERT_TRUE(proto_pkt_prepare(&pkt, reqBuffer.data(), reqBuffer.size(), proto_req_getPayloadSize(&req)));
 				}
 
-				reqWritten = proto_pkt_encode(&pkt);
+				reqWritten = proto_pkt_encode(&pkt, reqBuffer.data(), reqBuffer.size());
 			}
 
 			for (int i = 0; i < reqWritten; i++) {
@@ -113,7 +107,6 @@ static void _requestTransferCallback(ProtoReq *request, ProtoRes *response, void
 	ASSERT_TRUE(data != NULL);
 
 	ASSERT_EQ(request->cmd, PROTO_CMD_SPI_TRANSFER);
-	ASSERT_EQ(request->id,  0x05);
 
 	{
 		ProtoReqTransfer &t = request->request.transfer;
@@ -153,7 +146,6 @@ static void _responseTransferCallback(uint8_t *buffer, uint16_t bufferSize, void
 		_deserializeResponse(buffer, bufferSize, PROTO_CMD_SPI_TRANSFER, res);
 
 		ASSERT_EQ(res.cmd,  PROTO_CMD_SPI_TRANSFER);
-		ASSERT_EQ(res.id,   0x5);
 		ASSERT_EQ(res.code, PROTO_NO_ERROR);
 
 		{
@@ -173,7 +165,7 @@ static void _responseTransferCallback(uint8_t *buffer, uint16_t bufferSize, void
 
 
 TEST(firmware_programmer, proto_transfer) {
-	uint8_t buffer[1024];
+	std::vector<uint8_t> buffer(1024, 0);
 
 	{
 		Programmer prog;
@@ -181,32 +173,29 @@ TEST(firmware_programmer, proto_transfer) {
 		uint8_t callbackData = 0;
 
 		programmer_setup(
-			&prog,
-			buffer,
-			sizeof(buffer),
-			_requestTransferCallback,
-			_responseTransferCallback,
-			&callbackData
+			&prog, buffer.data(), buffer.size(), _requestTransferCallback, _responseTransferCallback, &callbackData
 		);
 
 		{
-			uint8_t  reqBuffer[1024];
-			uint16_t reqWritten;
+			std::vector<uint8_t> reqBuffer(1024, 0);
+			uint16_t             reqWritten;
 
 			{
 				ProtoPkt pkt;
 
+				proto_pkt_init(&pkt, reqBuffer.data(), reqBuffer.size(), PROTO_CMD_SPI_TRANSFER, 0x5);
+
 				{
 					ProtoReq req;
 
-					proto_req_init(&req, PROTO_CMD_SPI_TRANSFER, 0x5);
+					proto_req_init(&req, pkt.payload, pkt.payloadSize, pkt.code);
 
 					req.request.transfer.rxBufferSize = 128;
 					req.request.transfer.txBufferSize = 32;
 					req.request.transfer.rxSkipSize   = 32;
 					req.request.transfer.flags        = PROTO_SPI_TRANSFER_FLAG_KEEP_CS;
 
-					proto_pkt_init(&pkt, reqBuffer, sizeof(reqBuffer), req.cmd, req.id, proto_req_getPayloadSize(&req));
+					proto_pkt_prepare(&pkt, reqBuffer.data(), reqBuffer.size(), proto_req_getPayloadSize(&req));
 
 					proto_req_assign(&req, pkt.payload, pkt.payloadSize);
 					{
@@ -219,7 +208,9 @@ TEST(firmware_programmer, proto_transfer) {
 					proto_req_encode(&req, pkt.payload, pkt.payloadSize);
 				}
 
-				reqWritten = proto_pkt_encode(&pkt);
+				reqWritten = proto_pkt_encode(&pkt, reqBuffer.data(), reqBuffer.size());
+
+				debug_dumpBuffer(reqBuffer.data(), reqWritten, 32, 0);
 			}
 
 			for (int i = 0; i < reqWritten; i++) {

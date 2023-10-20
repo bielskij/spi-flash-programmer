@@ -16,20 +16,25 @@
 
 
 TEST(common_protocol, packet_no_payload) {
-	uint8_t txBuffer[MEM_SIZE] = { 0 };
-	size_t  txBufferWritten;
+	std::vector<uint8_t> txBuffer(MEM_SIZE, 0);
+	size_t               txBufferWritten;
 
 	{
 		ProtoPkt pkt;
 
-		proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), PROTO_CMD_GET_INFO, 0x12, 0);
+		proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), PROTO_CMD_GET_INFO, 0x12);
 
 		ASSERT_EQ(pkt.code,        PROTO_CMD_GET_INFO);
 		ASSERT_EQ(pkt.id,          0x12);
 		ASSERT_EQ(pkt.payload,     nullptr);
+		ASSERT_NE(pkt.payloadSize, 0);
+
+		ASSERT_TRUE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), 0));
+
+		ASSERT_EQ(pkt.payload,     nullptr);
 		ASSERT_EQ(pkt.payloadSize, 0);
 
-		txBufferWritten = proto_pkt_encode(&pkt);
+		txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -67,22 +72,27 @@ TEST(common_protocol, packet_no_payload) {
 
 
 TEST(common_protocol, packet_short_payload) {
-	uint8_t txBuffer[MEM_SIZE] = { 0 };
-	size_t  txBufferWritten;
+	std::vector<uint8_t> txBuffer(MEM_SIZE, 0);
+	size_t               txBufferWritten;
 
 	{
 		ProtoPkt pkt;
 
 		std::string payload = STRING_PAYLOAD_SHORT;
 
-		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), PROTO_CMD_GET_INFO, 0x12, payload.length()));
+		proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), PROTO_CMD_GET_INFO, 0x12);
+
+		ASSERT_EQ(pkt.payload,     nullptr);
+		ASSERT_NE(pkt.payloadSize, 0);
+
+		ASSERT_TRUE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), payload.length()));
 
 		ASSERT_NE(pkt.payload,     nullptr);
 		ASSERT_NE(pkt.payloadSize, 0);
 
 		memcpy(pkt.payload, payload.data(), payload.length());
 
-		txBufferWritten = proto_pkt_encode(&pkt);
+		txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -115,22 +125,27 @@ TEST(common_protocol, packet_short_payload) {
 
 
 TEST(common_protocol, packet_long_payload) {
-	uint8_t txBuffer[MEM_SIZE] = { 0 };
-	size_t  txBufferWritten;
+	std::vector<uint8_t> txBuffer(MEM_SIZE, 0);
+	size_t               txBufferWritten;
 
 	{
 		ProtoPkt pkt;
 
 		std::string payload = STRING_PAYLOAD_LONG;
 
-		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), PROTO_CMD_GET_INFO, 0x12, payload.size()));
+		proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), PROTO_CMD_GET_INFO, 0x12);
+
+		ASSERT_EQ(pkt.payload,     nullptr);
+		ASSERT_NE(pkt.payloadSize, 0);
+
+		ASSERT_TRUE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), payload.length()));
 
 		ASSERT_NE(pkt.payload,     nullptr);
 		ASSERT_NE(pkt.payloadSize, 0);
 
 		memcpy(pkt.payload, payload.data(), payload.length());
 
-		txBufferWritten = proto_pkt_encode(&pkt);
+		txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -163,18 +178,19 @@ TEST(common_protocol, packet_long_payload) {
 
 
 TEST(common_protocol, packet_error_payload_too_long) {
-	uint8_t txBuffer[MEM_SIZE] = { 0 };
-	size_t  txBufferWritten;
+	std::vector<uint8_t> txBuffer(MEM_SIZE, 0);
+	size_t               txBufferWritten;
 
 	// Request bigger than memory buffer
 	{
 		ProtoPkt pkt;
 
-		ASSERT_FALSE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), PROTO_CMD_GET_INFO, 0x12, sizeof(txBuffer) - 1));
+		proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), PROTO_CMD_GET_INFO, 0x12);
 
-		ASSERT_TRUE (proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), PROTO_CMD_GET_INFO, 0x12, sizeof(txBuffer) - PROTO_FRAME_MIN_SIZE));
+		ASSERT_FALSE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), txBuffer.size() - 1));
+		ASSERT_TRUE (proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), txBuffer.size() - PROTO_FRAME_MIN_SIZE));
 
-		txBufferWritten = proto_pkt_encode(&pkt);
+		txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -205,18 +221,23 @@ TEST(common_protocol, packet_error_payload_too_long) {
 
 
 TEST(common_protocol, packet_error_invalid_crc) {
-	uint8_t txBuffer[MEM_SIZE] = { 0 };
-	size_t  txBufferWritten;
+	std::vector<uint8_t> txBuffer(MEM_SIZE, 0);
+	size_t               txBufferWritten;
 
 	{
 		ProtoPkt pkt;
 
-		proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), PROTO_CMD_GET_INFO, 0x12, 0);
+		proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), PROTO_CMD_GET_INFO, 0x12);
+
+		ASSERT_EQ(pkt.payload,     nullptr);
+		ASSERT_NE(pkt.payloadSize, 0);
+
+		ASSERT_TRUE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), 0));
 
 		ASSERT_EQ(pkt.payload,     nullptr);
 		ASSERT_EQ(pkt.payloadSize, 0);
 
-		txBufferWritten = proto_pkt_encode(&pkt);
+		txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 
 		ASSERT_GT(txBufferWritten, 0);
 

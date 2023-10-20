@@ -46,6 +46,8 @@ struct SerialSpi::Impl {
 	Capabilities            capabilities;
 
 	std::vector<uint8_t> packetBuffer;
+	size_t               txSize;
+	size_t               rxSize;
 
 	Impl(Serial &serial) : packetBuffer(32) {
 		this->serial.reset(new SerialProxy(serial));
@@ -82,16 +84,19 @@ struct SerialSpi::Impl {
 				memset(rxBuffer, 0, rxSize);
 			}
 
-			this->executeCmd(
-				PROTO_CMD_SPI_TRANSFER,
-				[](ProtoReq &request) {
-					request.request.transfer.txBufferSize
-				},
-				[](ProtoRes &response) {
-
-				},
-				TIMEOUT_MS
-			);
+//			this->executeCmd(
+//				PROTO_CMD_SPI_TRANSFER,
+//				[](ProtoReq &request) {
+//					request.request.transfer.txBufferSize =
+//				},
+//				[](ProtoReq &request) {
+//
+//				},
+//				[](ProtoRes &response) {
+//
+//				},
+//				TIMEOUT_MS
+//			);
 
 //			this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, rxSkip, 0);
 //
@@ -128,7 +133,7 @@ struct SerialSpi::Impl {
 			t.txBuffer     = nullptr;
 			t.txBufferSize = 0;
 
-		}, {}, TIMEOUT_MS);
+		}, {}, {}, TIMEOUT_MS);
 	}
 
 
@@ -147,30 +152,26 @@ struct SerialSpi::Impl {
 
 	void executeCmd(
 		uint8_t cmd,
-		std::function<void(ProtoReq &)> requestPrepareCallback,
-		std::function<void(ProtoReq &)> requestFillCallback,
-		std::function<void(ProtoRes &)> responseDataCallback,
+		std::function<void(ProtoReq &)>       requestPrepareCallback,
+		std::function<void(ProtoReq &)>       requestFillCallback,
+		std::function<void(const ProtoRes &)> responseDataCallback,
 		int timeout
 	) {
 		ProtoPkt packet;
 
+		uint8_t *packetBuffer     = this->packetBuffer.data();
+		uint16_t packetBufferSize = this->packetBuffer.size();
+
+		proto_pkt_init(&packet, packetBuffer, packetBufferSize, cmd, ++this->id);
+
 		{
 			ProtoReq request;
 
-			proto_req_init(&request, cmd, ++this->id);
+			proto_req_init(&request, packet.payload, packet.payloadSize, packet.code);
 
 			if (requestPrepareCallback) {
 				requestPrepareCallback(request);
 			}
-
-			proto_pkt_init(
-				&packet,
-				this->packetBuffer.data(),
-				this->packetBuffer.size(),
-				request.cmd,
-				request.id,
-				proto_req_getPayloadSize(&request)
-			);
 
 			proto_req_assign(&request, packet.payload, packet.payloadSize);
 			{
@@ -179,14 +180,16 @@ struct SerialSpi::Impl {
 				}
 			}
 			proto_req_encode(&request, packet.payload, packet.payloadSize);
+
+			proto_pkt_prepare(&packet, packetBuffer, packetBufferSize, proto_req_getPayloadSize(&request));
 		}
 
-		this->serial->write(packetBuffer.data(), proto_pkt_encode(&packet), TIMEOUT_MS);
+		this->serial->write(packetBuffer, proto_pkt_encode(&packet, packetBuffer, packetBufferSize), TIMEOUT_MS);
 
 		{
 			ProtoPktDes decoder;
 
-			proto_pkt_dec_setup(&decoder, this->packetBuffer.data(), this->packetBuffer.size());
+			proto_pkt_dec_setup(&decoder, packetBuffer, packetBufferSize);
 
 			{
 				uint8_t decRet;
@@ -210,8 +213,7 @@ struct SerialSpi::Impl {
 						{
 							ProtoRes response;
 
-							proto_res_init(&response, cmd, packet.code, packet.id);
-
+							proto_res_init  (&response, packet.payload, packet.payloadSize, packet.code, packet.id);
 							proto_res_decode(&response, packet.payload, packet.payloadSize);
 							proto_res_assign(&response, packet.payload, packet.payloadSize);
 
@@ -228,9 +230,35 @@ struct SerialSpi::Impl {
 	void attach() {
 		ProtoRes response;
 
-		executeCmd(PROTO_CMD_GET_INFO, {}, response, TIMEOUT_MS);
+		executeCmd(PROTO_CMD_GET_INFO, {}, {}, [](const ProtoRes &response) {
+			DBG(("version %u.%u, payload size: %u", response.response.getInfo.version.major, response.response.getInfo.version.minor, response.response.getInfo.packetSize));
+		}, TIMEOUT_MS);
 
-		DBG(("version %u.%u, payload size: %u", response.response.getInfo.version.major, response.response.getInfo.version.minor, response.response.getInfo.payloadSize));
+		this->packetBuffer = std::vector<uint8_t>(response.response.getInfo.packetSize);
+
+		{
+			ProtoPkt pkt;
+
+			proto_pkt_init(&pkt, this->packetBuffer.data(), this->packetBuffer.size(), 0, 0);
+
+			{
+				ProtoReq req;
+
+				proto_req_init(&req, pkt.payload, pkt.payloadSize, PROTO_CMD_SPI_TRANSFER);
+
+				this->txSize = req.request.transfer.txBufferSize;
+			}
+
+			{
+				ProtoRes res;
+
+				proto_res_init(&res, pkt.payload, pkt.payloadSize, PROTO_CMD_SPI_TRANSFER, PROTO_NO_ERROR);
+
+				this->rxSize = res.response.transfer.rxBufferSize;
+			}
+		}
+
+		DBG(("Max TX size: %zd, max RX size: %zd", this->txSize, this->rxSize));
 
 		// Be sure CS pin is released.
 		this->chipSelect(false);

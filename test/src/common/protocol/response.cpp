@@ -35,16 +35,19 @@ class ResponseTestWithParameter : public testing::TestWithParam<ResponseTestPara
 
 
 TEST_P(ResponseTestWithParameter, common_protocol_response) {
-	uint8_t  txBuffer[1024];
-	uint16_t txBufferWritten;
-	uint8_t  rxBuffer[1024];
+	std::vector<uint8_t> txBuffer(1024, 0);
+	std::vector<uint8_t> rxBuffer(1024, 0);
+	size_t               txBufferWritten;
+
 
 	ProtoPkt pkt;
+
+	proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), GetParam().cmd, GetParam().id);
 
 	{
 		ProtoRes res;
 
-		proto_res_init(&res, GetParam().cmd, GetParam().code, GetParam().id);
+		proto_res_init(&res, pkt.payload, pkt.payloadSize, pkt.code, GetParam().code);
 
 		std::cout << "Testing command: " << std::to_string(GetParam().cmd) << ", code: " << std::to_string(GetParam().code) << std::endl;
 
@@ -52,7 +55,6 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 			GetParam().prepareRes(res);
 		}
 
-		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), res.code, res.id, proto_res_getPayloadSize(&res)));
 		{
 			proto_res_assign(&res, pkt.payload, pkt.payloadSize);
 			{
@@ -62,7 +64,9 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 			}
 			ASSERT_EQ(proto_res_encode(&res, pkt.payload, pkt.payloadSize), pkt.payloadSize);
 
-			txBufferWritten = proto_pkt_encode(&pkt);
+			ASSERT_TRUE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), proto_res_getPayloadSize(&res)));
+
+			txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 		}
 
 		ASSERT_GT(txBufferWritten, 0);
@@ -71,7 +75,7 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 	{
 		ProtoPktDes decoder;
 
-		proto_pkt_dec_setup(&decoder, rxBuffer, sizeof(rxBuffer));
+		proto_pkt_dec_setup(&decoder, rxBuffer.data(), txBuffer.size());
 
 		uint16_t i;
 		for (i = 0; i < txBufferWritten; i++) {
@@ -85,7 +89,7 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 				ASSERT_EQ(pkt.code, GetParam().code);
 				ASSERT_EQ(pkt.id,   GetParam().id);
 
-				proto_res_init(&res, GetParam().cmd, pkt.code, pkt.id);
+				proto_res_init(&res, pkt.payload, pkt.payloadSize, GetParam().cmd, pkt.code);
 
 				if (proto_res_getPayloadSize(&res)) {
 					ASSERT_NE(pkt.payload,     nullptr);
@@ -103,7 +107,7 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 				proto_res_assign(&res, pkt.payload, pkt.payloadSize);
 
 				ASSERT_EQ(res.cmd, GetParam().cmd);
-				ASSERT_EQ(res.id,  GetParam().id);
+				ASSERT_EQ(pkt.id,  GetParam().id);
 
 				if (GetParam().validateRes) {
 					GetParam().validateRes(res);

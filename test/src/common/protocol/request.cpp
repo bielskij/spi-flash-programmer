@@ -39,10 +39,12 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 
 	ProtoPkt pkt;
 
+	proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), GetParam().cmd, GetParam().id);
+
 	{
 		ProtoReq req;
 
-		proto_req_init(&req, GetParam().cmd, GetParam().id);
+		proto_req_init(&req, pkt.payload, pkt.payloadSize, pkt.code);
 
 		std::cout << "Testing command: " + std::to_string(GetParam().cmd) << std::endl;
 
@@ -50,7 +52,6 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 			GetParam().prepareReq(req);
 		}
 
-		ASSERT_TRUE(proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), req.cmd, req.id, proto_req_getPayloadSize(&req)));
 		{
 			proto_req_assign(&req, pkt.payload, pkt.payloadSize);
 			{
@@ -59,9 +60,10 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 				}
 			}
 			ASSERT_EQ(proto_req_encode(&req, pkt.payload, pkt.payloadSize), pkt.payloadSize);
-
-			txBufferWritten = proto_pkt_encode(&pkt);
 		}
+
+		proto_pkt_prepare(&pkt, txBuffer, sizeof(txBuffer), proto_req_getPayloadSize(&req));
+		txBufferWritten = proto_pkt_encode(&pkt, txBuffer, sizeof(txBuffer));
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -83,7 +85,7 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 				ASSERT_EQ(pkt.code, GetParam().cmd);
 				ASSERT_EQ(pkt.id,   GetParam().id);
 
-				proto_req_init(&req, pkt.code, pkt.id);
+				proto_req_init(&req, pkt.payload, pkt.payloadSize, pkt.code);
 
 				if (proto_req_getPayloadSize(&req)) {
 					ASSERT_NE(pkt.payload,     nullptr);
@@ -101,7 +103,7 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 				proto_req_assign(&req, pkt.payload, pkt.payloadSize);
 
 				ASSERT_EQ(req.cmd, GetParam().cmd);
-				ASSERT_EQ(req.id,  GetParam().id);
+				ASSERT_EQ(pkt.id,  GetParam().id);
 
 				if (GetParam().validateReq) {
 					GetParam().validateReq(req);
