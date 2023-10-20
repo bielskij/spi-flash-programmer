@@ -42,7 +42,6 @@ typedef struct _ProtoResTransfer {
 
 typedef struct _ProtoRes {
 	uint8_t cmd;
-	uint8_t code;
 
 	union {
 		ProtoResGetInfo  getInfo;
@@ -51,7 +50,7 @@ typedef struct _ProtoRes {
 } ProtoRes;
 
 
-void     proto_res_init  (ProtoRes *response, void *memory, uint16_t memorySize, uint8_t cmd, uint8_t code);
+void     proto_res_init  (ProtoRes *response, void *memory, uint16_t memorySize, uint8_t cmd);
 void     proto_res_assign(ProtoRes *response, void *memory, uint16_t memorySize);
 uint16_t proto_res_encode(ProtoRes *response, void *memory, uint16_t memorySize);
 uint16_t proto_res_decode(ProtoRes *response, void *memory, uint16_t memorySize);

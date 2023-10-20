@@ -5,17 +5,15 @@
 #include "firmware/programmer.h"
 
 
-static void _deserializeResponse(uint8_t *buffer, uint16_t bufferSize, uint8_t cmd, ProtoRes &res) {
+static void _deserializeResponse(uint8_t *buffer, uint16_t bufferSize, uint8_t cmd, ProtoPkt &pkt, ProtoRes &res) {
 	ProtoPktDes des;
 
 	proto_pkt_dec_setup(&des, buffer, bufferSize);
 
 	for (uint16_t i = 0; i < bufferSize; i++) {
-		ProtoPkt pkt;
-
 		auto ret = proto_pkt_dec_putByte(&des, buffer[i], &pkt);
 		if (ret != PROTO_PKT_DES_RET_IDLE) {
-			proto_res_init(&res, pkt.payload, pkt.payloadSize, cmd, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret));
+			proto_res_init(&res, pkt.payload, pkt.payloadSize, cmd);
 
 			proto_res_decode(&res, pkt.payload, pkt.payloadSize);
 			proto_res_assign(&res, pkt.payload, pkt.payloadSize);
@@ -41,12 +39,12 @@ static void _responseGetInfoCallback(uint8_t *buffer, uint16_t bufferSize, void 
 	ASSERT_TRUE(data != NULL);
 
 	{
+		ProtoPkt pkt;
 		ProtoRes res;
 
-		_deserializeResponse(buffer, bufferSize, PROTO_CMD_GET_INFO, res);
+		_deserializeResponse(buffer, bufferSize, PROTO_CMD_GET_INFO, pkt, res);
 
 		ASSERT_EQ(res.cmd,  PROTO_CMD_GET_INFO);
-		ASSERT_EQ(res.code, PROTO_NO_ERROR);
 
 		ASSERT_EQ(res.response.getInfo.version.major, PROTO_VERSION_MAJOR);
 		ASSERT_EQ(res.response.getInfo.version.minor, PROTO_VERSION_MINOR);
@@ -141,12 +139,13 @@ static void _responseTransferCallback(uint8_t *buffer, uint16_t bufferSize, void
 	ASSERT_TRUE(data != NULL);
 
 	{
+		ProtoPkt pkt;
 		ProtoRes res;
 
-		_deserializeResponse(buffer, bufferSize, PROTO_CMD_SPI_TRANSFER, res);
+		_deserializeResponse(buffer, bufferSize, PROTO_CMD_SPI_TRANSFER, pkt, res);
 
 		ASSERT_EQ(res.cmd,  PROTO_CMD_SPI_TRANSFER);
-		ASSERT_EQ(res.code, PROTO_NO_ERROR);
+		ASSERT_EQ(pkt.code, PROTO_NO_ERROR);
 
 		{
 			ProtoResTransfer &t = res.response.transfer;
@@ -209,8 +208,6 @@ TEST(firmware_programmer, proto_transfer) {
 				}
 
 				reqWritten = proto_pkt_encode(&pkt, reqBuffer.data(), reqBuffer.size());
-
-				debug_dumpBuffer(reqBuffer.data(), reqWritten, 32, 0);
 			}
 
 			for (int i = 0; i < reqWritten; i++) {

@@ -28,12 +28,7 @@ void programmer_setup(
 
 static void _sendError(Programmer *programmer, ProtoPkt *packet, ProtoRes *response, uint8_t errorCode) {
 	proto_pkt_init(packet, programmer->mem, programmer->memSize, packet->code, packet->id);
-	proto_res_init(response, packet->payload, packet->payloadSize, packet->code, errorCode);
-
-	proto_pkt_prepare(packet, programmer->mem, programmer->memSize, proto_res_getPayloadSize(response));
-
-	proto_res_assign(response, packet->payload, packet->payloadSize);
-	proto_res_encode(response, packet->payload, packet->payloadSize);
+	proto_pkt_prepare(packet, programmer->mem, programmer->memSize, 0);
 }
 
 
@@ -46,23 +41,25 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 		ProtoRes response;
 
 		do {
-			ProtoReq request;
-
-			uint16_t packetMaxSize;
-
 			if (PROTO_PKT_DES_RET_GET_ERROR_CODE(ret) != PROTO_NO_ERROR) {
 				_sendError(programmer, &packet, &response, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret));
 				break;
 			}
+
+			ProtoReq request;
+			uint16_t packetMaxSize;
+			uint8_t  packetCmd;
 
 			// Parse, assign request to coming packet
 			proto_req_init  (&request, packet.payload, packet.payloadSize, packet.code);
 			proto_req_decode(&request, packet.payload, packet.payloadSize);
 			proto_req_assign(&request, packet.payload, packet.payloadSize);
 
+			packetCmd = packet.code;
+
 			// Start preparation of response
-			proto_pkt_init(&packet, programmer->mem, programmer->memSize, packet.code, packet.id);
-			proto_res_init(&response, packet.payload, packet.payloadSize, packet.code, PROTO_NO_ERROR);
+			proto_pkt_init(&packet, programmer->mem, programmer->memSize, PROTO_NO_ERROR, packet.id);
+			proto_res_init(&response, packet.payload, packet.payloadSize, packetCmd);
 
 			packetMaxSize = packet.payloadSize;
 
@@ -96,7 +93,7 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 					break;
 			}
 
-			if (response.code != PROTO_NO_ERROR) {
+			if (packet.code != PROTO_NO_ERROR) {
 				break;
 			}
 

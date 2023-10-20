@@ -8,9 +8,9 @@
 struct ResponseTestParameters {
 	ResponseTestParameters(
 		uint8_t cmd, uint8_t code, uint8_t id,
-		std::function<void(ProtoRes &)> prepareRes,
-		std::function<void(ProtoRes &)> fillRes,
-		std::function<void(ProtoRes &)> validateRes
+		std::function<void(ProtoRes &)>             prepareRes,
+		std::function<void(ProtoRes &)>             fillRes,
+		std::function<void(ProtoPkt &, ProtoRes &)> validateRes
 	) {
 		this->cmd         = cmd;
 		this->code        = code;
@@ -24,9 +24,9 @@ struct ResponseTestParameters {
 	uint8_t code;
 	uint8_t id;
 
-	std::function<void(ProtoRes &)> prepareRes;
-	std::function<void(ProtoRes &)> fillRes;
-	std::function<void(ProtoRes &)> validateRes;
+	std::function<void(ProtoRes &)>             prepareRes;
+	std::function<void(ProtoRes &)>             fillRes;
+	std::function<void(ProtoPkt &, ProtoRes &)> validateRes;
 };
 
 
@@ -47,7 +47,7 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 	{
 		ProtoRes res;
 
-		proto_res_init(&res, pkt.payload, pkt.payloadSize, pkt.code, GetParam().code);
+		proto_res_init(&res, pkt.payload, pkt.payloadSize, pkt.code);
 
 		std::cout << "Testing command: " << std::to_string(GetParam().cmd) << ", code: " << std::to_string(GetParam().code) << std::endl;
 
@@ -89,7 +89,7 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 				ASSERT_EQ(pkt.code, GetParam().code);
 				ASSERT_EQ(pkt.id,   GetParam().id);
 
-				proto_res_init(&res, pkt.payload, pkt.payloadSize, GetParam().cmd, pkt.code);
+				proto_res_init(&res, pkt.payload, pkt.payloadSize, GetParam().cmd);
 
 				if (proto_res_getPayloadSize(&res)) {
 					ASSERT_NE(pkt.payload,     nullptr);
@@ -110,7 +110,7 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 				ASSERT_EQ(pkt.id,  GetParam().id);
 
 				if (GetParam().validateRes) {
-					GetParam().validateRes(res);
+					GetParam().validateRes(pkt, res);
 				}
 				break;
 			}
@@ -146,7 +146,7 @@ INSTANTIATE_TEST_SUITE_P(common_protocol_response, ResponseTestWithParameter, te
 			t.rxBuffer[1] = 0x20;
 		},
 
-		[](ProtoRes &res) {
+		[](ProtoPkt &pkt, ProtoRes &res) {
 			auto &t = res.response.transfer;
 
 			ASSERT_EQ(t.rxBufferSize,   12);
@@ -163,8 +163,8 @@ INSTANTIATE_TEST_SUITE_P(common_protocol_response, ResponseTestWithParameter, te
 
 		{},
 		{},
-		[](ProtoRes &res) {
-			ASSERT_EQ(res.code, PROTO_ERROR_INVALID_CRC);
+		[](ProtoPkt &pkt, ProtoRes &res) {
+			ASSERT_EQ(pkt.code, PROTO_ERROR_INVALID_CRC);
 		}
 	)
 ));

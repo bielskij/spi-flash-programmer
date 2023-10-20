@@ -173,6 +173,8 @@ struct SerialSpi::Impl {
 				requestPrepareCallback(request);
 			}
 
+			proto_pkt_prepare(&packet, packetBuffer, packetBufferSize, proto_req_getPayloadSize(&request));
+
 			proto_req_assign(&request, packet.payload, packet.payloadSize);
 			{
 				if (requestFillCallback) {
@@ -180,8 +182,6 @@ struct SerialSpi::Impl {
 				}
 			}
 			proto_req_encode(&request, packet.payload, packet.payloadSize);
-
-			proto_pkt_prepare(&packet, packetBuffer, packetBufferSize, proto_req_getPayloadSize(&request));
 		}
 
 		this->serial->write(packetBuffer, proto_pkt_encode(&packet, packetBuffer, packetBufferSize), TIMEOUT_MS);
@@ -213,7 +213,7 @@ struct SerialSpi::Impl {
 						{
 							ProtoRes response;
 
-							proto_res_init  (&response, packet.payload, packet.payloadSize, packet.code, packet.id);
+							proto_res_init  (&response, packet.payload, packet.payloadSize, packet.code);
 							proto_res_decode(&response, packet.payload, packet.payloadSize);
 							proto_res_assign(&response, packet.payload, packet.payloadSize);
 
@@ -228,13 +228,11 @@ struct SerialSpi::Impl {
 	}
 
 	void attach() {
-		ProtoRes response;
+		executeCmd(PROTO_CMD_GET_INFO, {}, {}, [this](const ProtoRes &response) {
+			DBG(("version %hhu.%hhu, payload size: %hu", response.response.getInfo.version.major, response.response.getInfo.version.minor, response.response.getInfo.packetSize));
 
-		executeCmd(PROTO_CMD_GET_INFO, {}, {}, [](const ProtoRes &response) {
-			DBG(("version %u.%u, payload size: %u", response.response.getInfo.version.major, response.response.getInfo.version.minor, response.response.getInfo.packetSize));
+			this->packetBuffer = std::vector<uint8_t>(response.response.getInfo.packetSize);
 		}, TIMEOUT_MS);
-
-		this->packetBuffer = std::vector<uint8_t>(response.response.getInfo.packetSize);
 
 		{
 			ProtoPkt pkt;
@@ -252,7 +250,7 @@ struct SerialSpi::Impl {
 			{
 				ProtoRes res;
 
-				proto_res_init(&res, pkt.payload, pkt.payloadSize, PROTO_CMD_SPI_TRANSFER, PROTO_NO_ERROR);
+				proto_res_init(&res, pkt.payload, pkt.payloadSize, PROTO_CMD_SPI_TRANSFER);
 
 				this->rxSize = res.response.transfer.rxBufferSize;
 			}

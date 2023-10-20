@@ -2,6 +2,7 @@
 
 #include "common/protocol.h"
 #include "firmware/programmer.h"
+#include "flashutil/exception.h"
 
 #define DEBUG 1
 #include "flashutil/debug.h"
@@ -220,7 +221,7 @@ struct SerialProgrammer::Impl {
 		DBG(("CALL, have %zd bytes, requested %zd bytes", this->outputBuffer.size(), bufferSize));
 
 		if (outputBuffer.size() < bufferSize) {
-			throw std::runtime_error("Not enough data in buffer!");
+			throw_Exception("Not enough data in buffer!");
 		}
 
 		auto beg = this->outputBuffer.begin();

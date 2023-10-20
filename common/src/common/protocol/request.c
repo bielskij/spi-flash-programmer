@@ -26,7 +26,7 @@ void proto_req_init(ProtoReq *request, void *memory, uint16_t memorySize, uint8_
 					t->txBufferSize = 0;
 				}
 
-				t->txBuffer     = NULL;
+				t->txBuffer = NULL;
 			}
 			break;
 
