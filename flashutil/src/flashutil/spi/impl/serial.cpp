@@ -66,57 +66,51 @@ struct SerialSpi::Impl {
 	}
 
 	void transfer(Messages &msgs) {
-		ProtoPkt pkt;
-
 		for (size_t i = 0; i < msgs.count(); i++) {
 			auto &msg = msgs.at(i);
 
-			const size_t rxSize = msg.recv().getBytes();
-			const size_t txSize = msg.send().getBytes();
-			const size_t rxSkip = txSize + msg.recv().getSkips();
+			size_t rxSize = msg.recv().getBytes();
+			size_t txSize = msg.send().getBytes();
+			size_t rxSkip = txSize + msg.recv().getSkips();
 
-			uint8_t txBuffer[txSize];
-			uint8_t rxBuffer[rxSize];
+			while (rxSize > 0 && txSize > 0 && rxSkip > 0) {
+				executeCmd(
+					PROTO_CMD_SPI_TRANSFER,
 
-			memcpy(txBuffer, msg.send().data(), txSize);
+					[&rxSize, &txSize, &rxSkip](ProtoReq &request, ProtoRes &response) {
+						ProtoReqTransfer &t = request.request.transfer;
 
-			if (rxSize) {
-				memset(rxBuffer, 0, rxSize);
+						t.txBufferSize = std::min((size_t) t.txBufferSize, txSize);
+						txSize -= t.txBufferSize;
+
+						t.rxSkipSize = std::min((size_t) t.rxSkipSize, rxSkip);
+						rxSkip -= t.rxSkipSize;
+
+						if (t.rxSkipSize < t.txBufferSize) {
+							if (txSize == 0) {
+								t.rxBufferSize = std::min((size_t) response.response.transfer.rxBufferSize, rxSize);
+
+							} else {
+								size_t remain = t.txBufferSize - t.rxSkipSize;
+
+								t.rxBufferSize = std::min((size_t) response.response.transfer.rxBufferSize, remain);
+							}
+
+							rxSize -= t.rxBufferSize;
+						}
+					},
+
+					[](ProtoReq &req) {
+
+					},
+
+					[](const ProtoRes &res) {
+
+					},
+
+					TIMEOUT_MS
+				);
 			}
-
-//			this->executeCmd(
-//				PROTO_CMD_SPI_TRANSFER,
-//				[](ProtoReq &request) {
-//					request.request.transfer.txBufferSize =
-//				},
-//				[](ProtoReq &request) {
-//
-//				},
-//				[](ProtoRes &response) {
-//
-//				},
-//				TIMEOUT_MS
-//			);
-
-//			this->spiTransfer(txBuffer, txSize, rxBuffer, rxSize, rxSkip, 0);
-//
-//			if (msg.recv().getSkipMap().size() > 1) {
-//				throw std::runtime_error("More than 1 skip operation in a single message is not yet supported!");
-//			}
-//
-//			{
-//				std::size_t dstOffset = 0;
-//
-//				auto skipIndex = msg.recv().getSkipMap();
-//
-//				for (int i = 0; i < rxSize; i++) {
-//					if (skipIndex.find(i) != skipIndex.end()) {
-//						continue;
-//					}
-//
-//					msg.recv().data()[dstOffset++] = rxBuffer[i];
-//				}
-//			}
 		}
 	}
 
@@ -124,7 +118,7 @@ struct SerialSpi::Impl {
 	void chipSelect(bool select) {
 		ProtoRes response;
 
-		this->executeCmd(PROTO_CMD_SPI_TRANSFER, [select](ProtoReq &req) {
+		this->executeCmd(PROTO_CMD_SPI_TRANSFER, [select](ProtoReq &req, ProtoRes &res) {
 			ProtoReqTransfer &t = req.request.transfer;
 
 			t.flags        = select ? PROTO_SPI_TRANSFER_FLAG_KEEP_CS : 0;
@@ -152,25 +146,27 @@ struct SerialSpi::Impl {
 
 	void executeCmd(
 		uint8_t cmd,
-		std::function<void(ProtoReq &)>       requestPrepareCallback,
-		std::function<void(ProtoReq &)>       requestFillCallback,
-		std::function<void(const ProtoRes &)> responseDataCallback,
+		std::function<void(ProtoReq &, ProtoRes &)> requestPrepareCallback,
+		std::function<void(ProtoReq &)>             requestFillCallback,
+		std::function<void(const ProtoRes &)>       responseDataCallback,
 		int timeout
 	) {
-		ProtoPkt packet;
-
 		uint8_t *packetBuffer     = this->packetBuffer.data();
 		uint16_t packetBufferSize = this->packetBuffer.size();
+
+		ProtoPkt packet;
+		ProtoRes response;
 
 		proto_pkt_init(&packet, packetBuffer, packetBufferSize, cmd, ++this->id);
 
 		{
 			ProtoReq request;
 
-			proto_req_init(&request, packet.payload, packet.payloadSize, packet.code);
+			proto_req_init(&request,  packet.payload, packet.payloadSize, packet.code);
+			proto_res_init(&response, packet.payload, packet.payloadSize, packet.code);
 
 			if (requestPrepareCallback) {
-				requestPrepareCallback(request);
+				requestPrepareCallback(request, response);
 			}
 
 			proto_pkt_prepare(&packet, packetBuffer, packetBufferSize, proto_req_getPayloadSize(&request));
@@ -183,6 +179,8 @@ struct SerialSpi::Impl {
 			}
 			proto_req_encode(&request, packet.payload, packet.payloadSize);
 		}
+
+		debug_dumpBuffer(packetBuffer, proto_pkt_encode(&packet, packetBuffer, packetBufferSize), 32, 0);
 
 		this->serial->write(packetBuffer, proto_pkt_encode(&packet, packetBuffer, packetBufferSize), TIMEOUT_MS);
 
@@ -210,16 +208,12 @@ struct SerialSpi::Impl {
 							throw_Exception("Protocol error! ID does not match!");
 						}
 
-						{
-							ProtoRes response;
+						proto_res_init  (&response, packet.payload, packet.payloadSize, cmd);
+						proto_res_decode(&response, packet.payload, packet.payloadSize);
+						proto_res_assign(&response, packet.payload, packet.payloadSize);
 
-							proto_res_init  (&response, packet.payload, packet.payloadSize, packet.code);
-							proto_res_decode(&response, packet.payload, packet.payloadSize);
-							proto_res_assign(&response, packet.payload, packet.payloadSize);
-
-							if (responseDataCallback) {
-								responseDataCallback(response);
-							}
+						if (responseDataCallback) {
+							responseDataCallback(response);
 						}
 					}
 				} while (decRet == PROTO_PKT_DES_RET_IDLE);
@@ -233,30 +227,6 @@ struct SerialSpi::Impl {
 
 			this->packetBuffer = std::vector<uint8_t>(response.response.getInfo.packetSize);
 		}, TIMEOUT_MS);
-
-		{
-			ProtoPkt pkt;
-
-			proto_pkt_init(&pkt, this->packetBuffer.data(), this->packetBuffer.size(), 0, 0);
-
-			{
-				ProtoReq req;
-
-				proto_req_init(&req, pkt.payload, pkt.payloadSize, PROTO_CMD_SPI_TRANSFER);
-
-				this->txSize = req.request.transfer.txBufferSize;
-			}
-
-			{
-				ProtoRes res;
-
-				proto_res_init(&res, pkt.payload, pkt.payloadSize, PROTO_CMD_SPI_TRANSFER);
-
-				this->rxSize = res.response.transfer.rxBufferSize;
-			}
-		}
-
-		DBG(("Max TX size: %zd, max RX size: %zd", this->txSize, this->rxSize));
 
 		// Be sure CS pin is released.
 		this->chipSelect(false);

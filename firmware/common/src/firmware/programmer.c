@@ -41,14 +41,13 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 		ProtoRes response;
 
 		do {
+			ProtoReq request;
+			uint8_t  packetCmd;
+
 			if (PROTO_PKT_DES_RET_GET_ERROR_CODE(ret) != PROTO_NO_ERROR) {
 				_sendError(programmer, &packet, &response, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret));
 				break;
 			}
-
-			ProtoReq request;
-			uint16_t packetMaxSize;
-			uint8_t  packetCmd;
 
 			// Parse, assign request to coming packet
 			proto_req_init  (&request, packet.payload, packet.payloadSize, packet.code);
@@ -61,8 +60,6 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 			proto_pkt_init(&packet, programmer->mem, programmer->memSize, PROTO_NO_ERROR, packet.id);
 			proto_res_init(&response, packet.payload, packet.payloadSize, packetCmd);
 
-			packetMaxSize = packet.payloadSize;
-
 			switch (request.cmd) {
 				case PROTO_CMD_GET_INFO:
 					{
@@ -71,7 +68,7 @@ void programmer_putByte(Programmer *programmer, uint8_t byte) {
 						res->version.major = PROTO_VERSION_MAJOR;
 						res->version.minor = PROTO_VERSION_MINOR;
 
-						res->packetSize = packetMaxSize;
+						res->packetSize = programmer->memSize;
 					}
 					break;
 
