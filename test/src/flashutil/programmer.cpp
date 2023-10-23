@@ -22,6 +22,8 @@
 static std::unique_ptr<SerialProgrammer> createSerial() {
 	Flash flash;
 
+	flash.setId({ 0x01, 0x02, 0x03 });
+
 	flash.setBlockSize  (BLOCK_SIZE);
 	flash.setBlockCount (BLOCK_COUNT);
 	flash.setSectorSize (SECTOR_SIZE);

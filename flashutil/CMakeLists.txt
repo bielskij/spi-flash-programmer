@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD 14)
 
 find_package(Boost COMPONENTS program_options thread chrono REQUIRED)
 
+if(NOT TARGET spdlog)
+	find_package(spdlog REQUIRED)
+endif()
+
 set(SRC_FILES 
 	../common/src/common/crc8.c 
 	../common/src/common/protocol/common.c
