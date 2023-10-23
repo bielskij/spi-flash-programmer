@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "serialProgrammer.h"
 
 #include "common/protocol.h"
@@ -14,6 +16,7 @@ class DummyFlash {
 			READ_CMD,
 			READ_DATA,
 			HANDLE_CMD,
+			WRITE_RESPONSE,
 			IGNORE
 		};
 
@@ -32,9 +35,10 @@ class DummyFlash {
 		static const uint8_t STATUS_FLAG_BUSY = 0x01;
 		static const uint8_t STATUS_FLAG_WEL  = 0x02;
 
-		static const uint8_t CMD_ERASE_SECTOR = 0x20;
-		static const uint8_t CMD_ERASE_BLOCK  = 0x52;
-		static const uint8_t CMD_ERASE_CHIP   = 0x60;
+		static const uint8_t CMD_RDID = 0x9f;
+		static const uint8_t CMD_SE   = 0x20;
+		static const uint8_t CMD_BE   = 0x52;
+		static const uint8_t CMD_CE   = 0x60;
 
 	public:
 		DummyFlash(const Flash &geometry) : geometry(geometry), memory(geometry.getSize(), ERASED_BYTE) {
@@ -89,17 +93,17 @@ class DummyFlash {
 			uint8_t ret = 0xff;
 
 			switch (cmd) {
-				case CMD_ERASE_SECTOR:
-				case CMD_ERASE_BLOCK:
+				case CMD_SE:
+				case CMD_BE:
 					if (data.size() == 3) {
 						uint32_t address = (data[0] << 2) | (data[1] << 1) | (data[2]);
-						size_t   toErase = cmd == CMD_ERASE_SECTOR ? this->geometry.getSectorSize() : this->geometry.getBlockSize();
+						size_t   toErase = cmd == CMD_SE ? this->geometry.getSectorSize() : this->geometry.getBlockSize();
 
 						std::fill_n(this->memory.begin() + address, toErase, ERASED_BYTE);
 					}
 					break;
 
-				case CMD_ERASE_CHIP:
+				case CMD_CE:
 					if (data.size() == 0) {
 						std::fill_n(this->memory.begin(), this->memory.size(), ERASED_BYTE);
 						break;
@@ -113,28 +117,24 @@ class DummyFlash {
 			return ret;
 		}
 
-		void transfer(uint8_t *buffer, size_t bufferSize) {
-			for (size_t i = 0; i < bufferSize; i++) {
-				uint8_t byte = buffer[i];
+		uint8_t transfer(uint8_t txByte) {
+			switch (this->parseState) {
+				case ParseState::READ_CMD:
+					{
+						this->cmd = txByte;
 
-				switch (this->parseState) {
-					case ParseState::READ_CMD:
-						{
-							this->cmd = byte;
+						this->parseState = ParseState::READ_DATA;
+					}
+					break;
 
-							this->parseState = ParseState::READ_DATA;
-						}
-						break;
-
-					case ParseState::READ_DATA:
-						{
-							this->cmdData.push_back(byte);
-						}
-						break;
-				}
-
-				buffer[i] = onNewCmdByte(this->cmd, this->cmdData);
+				case ParseState::READ_DATA:
+					{
+						this->cmdData.push_back(txByte);
+					}
+					break;
 			}
+
+			return onNewCmdByte(this->cmd, this->cmdData);
 		}
 
 		void cs(bool select) {
@@ -240,13 +240,35 @@ struct SerialProgrammer::Impl {
 		switch (request->cmd) {
 			case PROTO_CMD_SPI_TRANSFER:
 				{
-					auto &t = request->request.transfer;
+					auto &req = request->request.transfer;
+					auto &res = response->response.transfer;
+
+					uint16_t toRecv = req.rxBufferSize;
 
 					self->flash.cs(true);
 
+					for (uint16_t i = 0; i < std::max(req.txBufferSize, (uint16_t)(req.rxSkipSize + req.rxBufferSize)); i++) {
+						uint8_t received;
 
+						if (i < req.txBufferSize) {
+							received = self->flash.transfer(req.txBuffer[i]);
 
-					if ((t.flags & PROTO_SPI_TRANSFER_FLAG_KEEP_CS) == 0) {
+						} else {
+							received = self->flash.transfer(0xff);
+						}
+
+						if (toRecv) {
+							if (i >= req.rxSkipSize) {
+								res.rxBuffer[i - req.rxSkipSize] = received;
+
+								toRecv--;
+							}
+						}
+					}
+
+					debug_dumpBuffer(res.rxBuffer, res.rxBufferSize, 32, 0);
+
+					if ((req.flags & PROTO_SPI_TRANSFER_FLAG_KEEP_CS) == 0) {
 						self->flash.cs(false);
 					}
 				}

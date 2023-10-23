@@ -33,13 +33,13 @@ class RequestTestWithParameter : public testing::TestWithParam<RequestTestParame
 
 
 TEST_P(RequestTestWithParameter, common_protocol_request) {
-	uint8_t  txBuffer[1024];
+	std::vector<uint8_t> txBuffer(1024, 0);
+	std::vector<uint8_t> rxBuffer(1024, 0);
 	uint16_t txBufferWritten;
-	uint8_t  rxBuffer[1024];
 
 	ProtoPkt pkt;
 
-	proto_pkt_init(&pkt, txBuffer, sizeof(txBuffer), GetParam().cmd, GetParam().id);
+	proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), GetParam().cmd, GetParam().id);
 
 	{
 		ProtoReq req;
@@ -52,6 +52,8 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 			GetParam().prepareReq(req);
 		}
 
+		proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), proto_req_getPayloadSize(&req));
+
 		{
 			proto_req_assign(&req, pkt.payload, pkt.payloadSize);
 			{
@@ -62,8 +64,7 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 			ASSERT_EQ(proto_req_encode(&req, pkt.payload, pkt.payloadSize), pkt.payloadSize);
 		}
 
-		proto_pkt_prepare(&pkt, txBuffer, sizeof(txBuffer), proto_req_getPayloadSize(&req));
-		txBufferWritten = proto_pkt_encode(&pkt, txBuffer, sizeof(txBuffer));
+		txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 
 		ASSERT_GT(txBufferWritten, 0);
 	}
@@ -71,7 +72,7 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 	{
 		ProtoPktDes decoder;
 
-		proto_pkt_dec_setup(&decoder, rxBuffer, sizeof(rxBuffer));
+		proto_pkt_dec_setup(&decoder, rxBuffer.data(), rxBuffer.size());
 
 		uint16_t i;
 		for (i = 0; i < txBufferWritten; i++) {

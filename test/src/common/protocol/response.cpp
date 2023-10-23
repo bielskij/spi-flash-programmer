@@ -42,18 +42,20 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 
 	ProtoPkt pkt;
 
-	proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), GetParam().cmd, GetParam().id);
+	proto_pkt_init(&pkt, txBuffer.data(), txBuffer.size(), GetParam().code, GetParam().id);
 
 	{
 		ProtoRes res;
 
-		proto_res_init(&res, pkt.payload, pkt.payloadSize, pkt.code);
+		proto_res_init(&res, pkt.payload, pkt.payloadSize, GetParam().cmd);
 
 		std::cout << "Testing command: " << std::to_string(GetParam().cmd) << ", code: " << std::to_string(GetParam().code) << std::endl;
 
 		if (GetParam().prepareRes) {
 			GetParam().prepareRes(res);
 		}
+
+		ASSERT_TRUE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), proto_res_getPayloadSize(&res)));
 
 		{
 			proto_res_assign(&res, pkt.payload, pkt.payloadSize);
@@ -63,8 +65,6 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 				}
 			}
 			ASSERT_EQ(proto_res_encode(&res, pkt.payload, pkt.payloadSize), pkt.payloadSize);
-
-			ASSERT_TRUE(proto_pkt_prepare(&pkt, txBuffer.data(), txBuffer.size(), proto_res_getPayloadSize(&res)));
 
 			txBufferWritten = proto_pkt_encode(&pkt, txBuffer.data(), txBuffer.size());
 		}

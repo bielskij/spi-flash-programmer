@@ -71,7 +71,12 @@ struct SerialSpi::Impl {
 
 			size_t rxSize = msg.recv().getBytes();
 			size_t txSize = msg.send().getBytes();
-			size_t rxSkip = txSize + msg.recv().getSkips();
+			size_t rxSkip = msg.recv().getSkips();
+
+			size_t txWritten = 0;
+			size_t rxWritten = 0;
+
+			DBG(("rxSize: %zd, txSize: %zd, skipSize: %zd", rxSize, txSize, rxSkip));
 
 			while (rxSize > 0 && txSize > 0 && rxSkip > 0) {
 				executeCmd(
@@ -83,29 +88,42 @@ struct SerialSpi::Impl {
 						t.txBufferSize = std::min((size_t) t.txBufferSize, txSize);
 						txSize -= t.txBufferSize;
 
-						t.rxSkipSize = std::min((size_t) t.rxSkipSize, rxSkip);
-						rxSkip -= t.rxSkipSize;
+						if (txSize == 0) {
+							t.rxSkipSize = rxSkip;
+							rxSkip = 0;
 
-						if (t.rxSkipSize < t.txBufferSize) {
-							if (txSize == 0) {
-								t.rxBufferSize = std::min((size_t) response.response.transfer.rxBufferSize, rxSize);
-
-							} else {
-								size_t remain = t.txBufferSize - t.rxSkipSize;
-
-								t.rxBufferSize = std::min((size_t) response.response.transfer.rxBufferSize, remain);
-							}
-
+							t.rxBufferSize = std::min((size_t) response.response.transfer.rxBufferSize, rxSize);
 							rxSize -= t.rxBufferSize;
+
+						} else {
+							size_t remain = std::min(rxSkip, (size_t) t.txBufferSize);
+
+							t.rxSkipSize = remain;
+							rxSkip -= remain;
+
+							if (t.txBufferSize > t.rxSkipSize) {
+								remain = std::min(rxSize, (size_t) t.txBufferSize - t.rxSkipSize);
+
+								t.rxBufferSize = remain;
+								rxSize -= remain;
+							}
 						}
 					},
 
-					[](ProtoReq &req) {
+					[&txWritten, &msg](ProtoReq &request) {
+						ProtoReqTransfer &t = request.request.transfer;
 
+						memcpy(t.txBuffer, msg.send().data() + txWritten, t.txBufferSize);
+
+						txWritten += t.txBufferSize;
 					},
 
-					[](const ProtoRes &res) {
+					[&rxWritten, &msg](const ProtoRes &response) {
+						const ProtoResTransfer &t = response.response.transfer;
 
+						memcpy(msg.recv().data() + rxWritten, t.rxBuffer, t.rxBufferSize);
+
+						rxWritten += t.rxBufferSize;
 					},
 
 					TIMEOUT_MS

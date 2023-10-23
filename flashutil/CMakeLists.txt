@@ -8,6 +8,10 @@ find_package(Boost COMPONENTS program_options thread chrono REQUIRED)
 
 set(SRC_FILES 
 	../common/src/common/crc8.c 
+	../common/src/common/protocol/common.c
+	../common/src/common/protocol/packet.c
+	../common/src/common/protocol/request.c
+	../common/src/common/protocol/response.c
 
 	src/flashutil/spi.cpp
 	src/flashutil/spi/creator.cpp
