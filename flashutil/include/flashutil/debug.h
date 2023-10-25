@@ -27,6 +27,12 @@ extern "C" {
 	#define DBG(x) do { } while (0)
 #endif
 
+#if DEBUG == 1
+	#define TRACE(x) do { _printErr("[TRC %s:%d]: ", __FUNCTION__, __LINE__); _printErr x; _printErr("\r\n"); } while (0)
+#else
+	#define TRACE(x) do { } while (0)
+#endif
+
 #define PRINTF(x) { _printErr x  }
 #define PRINTFLN(x) { PRINTF(x); PRINTF(("\n")); }
 

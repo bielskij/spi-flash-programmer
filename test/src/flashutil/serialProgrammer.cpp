@@ -237,6 +237,8 @@ struct SerialProgrammer::Impl {
 
 					self->flash.cs(true);
 
+					debug_dumpBuffer(req.txBuffer, req.txBufferSize, 32, 0);
+
 					for (uint16_t i = 0; i < std::max(req.txBufferSize, (uint16_t)(req.rxSkipSize + req.rxBufferSize)); i++) {
 						uint8_t received;
 
@@ -256,7 +258,9 @@ struct SerialProgrammer::Impl {
 						}
 					}
 
-					debug_dumpBuffer(res.rxBuffer, res.rxBufferSize, 32, 0);
+					if (res.rxBufferSize > 0) {
+						debug_dumpBuffer(res.rxBuffer, res.rxBufferSize, 32, 0);
+					}
 
 					if ((req.flags & PROTO_SPI_TRANSFER_FLAG_KEEP_CS) == 0) {
 						self->flash.cs(false);

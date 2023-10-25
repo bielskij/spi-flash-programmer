@@ -3,6 +3,8 @@
 
 #include "flashutil/programmer.h"
 #include "flashutil/entryPoint.h"
+
+#define DEBUG 1
 #include "flashutil/debug.h"
 
 using namespace flashutil;

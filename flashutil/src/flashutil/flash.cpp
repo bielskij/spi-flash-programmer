@@ -172,7 +172,7 @@ bool Flash::isGeometryValid() const {
 
 
 bool Flash::isValid() const {
-	if (this->isIdValid()) {
+	if (! this->isIdValid()) {
 		return false;
 	}
 

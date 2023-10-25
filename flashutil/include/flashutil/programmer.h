@@ -15,6 +15,7 @@
 class Programmer {
 	public:
 		Programmer(Spi &spiDev, const FlashRegistry *registry);
+		virtual ~Programmer();
 
 		void begin(const Flash *defaultGeometry);
 		void end();

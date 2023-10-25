@@ -78,7 +78,7 @@ struct SerialSpi::Impl {
 
 			DBG(("rxSize: %zd, txSize: %zd, skipSize: %zd", rxSize, txSize, rxSkip));
 
-			while (rxSize > 0 && txSize > 0 && rxSkip > 0) {
+			while (rxSize > 0 || txSize > 0 || rxSkip > 0) {
 				executeCmd(
 					PROTO_CMD_SPI_TRANSFER,
 

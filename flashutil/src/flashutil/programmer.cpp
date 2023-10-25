@@ -11,6 +11,7 @@
 #include "flashutil/exception.h"
 #include "flashutil/flash/builder.h"
 
+#define DEBUG 1
 #include "flashutil/debug.h"
 
 // TODO: Each chip should define mask for those flags
@@ -23,8 +24,15 @@ Programmer::Programmer(Spi &spiDev, const FlashRegistry *registry) : _spi(spiDev
 }
 
 
+Programmer::~Programmer() {
+	this->end();
+}
+
+
 void Programmer::begin(const Flash *defaultGeometry) {
 	auto &f = this->_flashInfo;
+
+	TRACE(("call, geometry: %p", defaultGeometry));
 
 	this->_spi.attach();
 
@@ -66,6 +74,8 @@ void Programmer::begin(const Flash *defaultGeometry) {
 
 
 void Programmer::end() {
+	TRACE(("call"));
+
 	this->_spi.detach();
 
 	this->_flashInfo = Flash();
@@ -188,6 +198,8 @@ void Programmer::waitForWIPClearance(int timeoutMs) {
 
 
 void Programmer::eraseChip() {
+	TRACE(("call"));
+
 	_verifyCommon(this->_flashInfo);
 
 	this->cmdWriteEnable();
@@ -196,6 +208,8 @@ void Programmer::eraseChip() {
 
 
 void Programmer::eraseBlockByAddress(uint32_t address, bool skipIfErased) {
+	TRACE(("call"));
+
 	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getBlockSize(), this->_flashInfo.getBlockSize());
 
 	this->cmdWriteEnable();
@@ -204,6 +218,8 @@ void Programmer::eraseBlockByAddress(uint32_t address, bool skipIfErased) {
 
 
 void Programmer::eraseBlockByNumber(int blockNo, bool skipIfErased) {
+	TRACE(("call"));
+
 	this->verifyFlashInfoBlockNo(blockNo);
 
 	this->cmdWriteEnable();
@@ -212,6 +228,8 @@ void Programmer::eraseBlockByNumber(int blockNo, bool skipIfErased) {
 
 
 void Programmer::eraseSectorByAddress(uint32_t address, bool skipIfErased) {
+	TRACE(("call"));
+
 	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getSectorSize(), this->_flashInfo.getSectorSize());
 
 	this->cmdWriteEnable();
@@ -220,6 +238,8 @@ void Programmer::eraseSectorByAddress(uint32_t address, bool skipIfErased) {
 
 
 void Programmer::eraseSectorByNumber(int sectorNo, bool skipIfErased) {
+	TRACE(("call"));
+
 	this->verifyFlashInfoSectorNo(sectorNo);
 
 	this->cmdWriteEnable();
@@ -229,6 +249,8 @@ void Programmer::eraseSectorByNumber(int sectorNo, bool skipIfErased) {
 
 void Programmer::cmdEraseChip() {
 	Spi::Messages msgs;
+
+	TRACE(("call"));
 
 	{
 		auto &msg = msgs.add();
@@ -243,6 +265,8 @@ void Programmer::cmdEraseChip() {
 
 void Programmer::cmdEraseBlock(uint32_t address) {
 	Spi::Messages msgs;
+
+	TRACE(("call"));
 
 	{
 		auto &msg = msgs.add();
@@ -262,6 +286,8 @@ void Programmer::cmdEraseBlock(uint32_t address) {
 void Programmer::cmdEraseSector(uint32_t address) {
 	Spi::Messages msgs;
 
+	TRACE(("call"));
+
 	{
 		auto &msg = msgs.add();
 
@@ -279,6 +305,8 @@ void Programmer::cmdEraseSector(uint32_t address) {
 
 void Programmer::cmdGetInfo(std::vector<uint8_t> &id) {
 	Spi::Messages msgs;
+
+	TRACE(("call"));
 
 	id.clear();
 
@@ -308,6 +336,8 @@ void Programmer::cmdGetInfo(std::vector<uint8_t> &id) {
 void Programmer::cmdGetStatus(uint8_t &reg) {
 	Spi::Messages msgs;
 
+	TRACE(("call"));
+
 	{
 		auto &msg = msgs.add();
 
@@ -328,6 +358,8 @@ void Programmer::cmdGetStatus(uint8_t &reg) {
 void Programmer::cmdWriteEnable() {
 	Spi::Messages msgs;
 
+	TRACE(("call"));
+
 	{
 		auto &msg = msgs.add();
 
@@ -341,6 +373,8 @@ void Programmer::cmdWriteEnable() {
 
 void Programmer::cmdFlashReadBegin(uint32_t address) {
 	Spi::Messages msgs;
+
+	TRACE(("call"));
 
 	{
 		auto &msg = msgs.add();
