@@ -30,7 +30,7 @@ struct HwSerial::Impl {
 	Result                      readResult;
 
 	void onCompleted(const boost::system::error_code &errorCode, const size_t bytesTransferred) {
-		DBG(("CALL, read: %zd bytes (%s)", bytesTransferred, errorCode.message().c_str()));
+		TRACE("Read: %zd bytes (%s)", bytesTransferred, errorCode.message().c_str());
 
 		if (errorCode) {
 			if (errorCode != boost::asio::error::operation_aborted) {
@@ -63,7 +63,7 @@ struct HwSerial::Impl {
 HwSerial::HwSerial(const std::string &serialPath, int baud) {
 	this->self.reset(new Impl(serialPath));
 
-	PRINTFLN(("Device %s opened!", serialPath.c_str()));
+	INFO("Device %s has been successfully opened!", serialPath.c_str());
 
 	{
 		boost::asio::serial_port &s = self->serial;
@@ -169,7 +169,7 @@ void HwSerial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 
 		case Result::SUCCESS:
 			{
-				DBG(("RESULT_SUCCESS"));
+				DEBUG("RESULT_SUCCESS");
 
 				self->timeoutTimer.cancel();
 			}
@@ -177,7 +177,7 @@ void HwSerial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 
 		case Result::TIMEOUT:
 			{
-				DBG(("RESULT_TIMEOUT"));
+				DEBUG("RESULT_TIMEOUT");
 
 				self->serial.cancel();
 

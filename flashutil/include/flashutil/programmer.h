@@ -20,6 +20,8 @@ class Programmer {
 		void begin(const Flash *defaultGeometry);
 		void end();
 
+		void unlockChip();
+
 		void eraseChip();
 
 		void eraseBlockByAddress(uint32_t address, bool skipIfErased);
@@ -44,6 +46,7 @@ class Programmer {
 		void cmdGetInfo(std::vector<uint8_t> &id);
 		void cmdGetStatus(uint8_t &reg);
 		void cmdWriteEnable();
+		void cmdWriteStatus(uint8_t reg);
 		void cmdFlashReadBegin(uint32_t address);
 
 	private:

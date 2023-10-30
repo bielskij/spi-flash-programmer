@@ -10,13 +10,18 @@
 #include "flashutil/programmer.h"
 #include "flashutil/exception.h"
 #include "flashutil/flash/builder.h"
-
-#define DEBUG 1
 #include "flashutil/debug.h"
 
 // TODO: Each chip should define mask for those flags
 #define STATUS_FLAG_WLE 0x02
 #define STATUS_FLAG_WIP 0x01
+
+#define ERASE_CHIP_TIMEOUT_MS    30000
+#define ERASE_BLOCK_TIMEOUT_MS   10000
+#define ERASE_SECTOR_TIMEOUT_MS    500
+#define WRITE_STATUS_TIMEOUT_MS    200
+#define WRITE_BYTE_TIMEOUT_MS      100
+#define WRITE_PAGE_TIMEOUT_MS      200
 
 
 Programmer::Programmer(Spi &spiDev, const FlashRegistry *registry) : _spi(spiDev) {
@@ -32,7 +37,7 @@ Programmer::~Programmer() {
 void Programmer::begin(const Flash *defaultGeometry) {
 	auto &f = this->_flashInfo;
 
-	TRACE(("call, geometry: %p", defaultGeometry));
+	TRACE("call, geometry: %p", defaultGeometry);
 
 	this->_spi.attach();
 
@@ -56,14 +61,14 @@ void Programmer::begin(const Flash *defaultGeometry) {
 			}
 
 			if (f.isGeometryValid()) {
-				PRINTFLN(("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdB",
+				INFO("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdB",
 					f.getName().c_str(), f.getId()[0], f.getId()[1], f.getId()[2],
 					f.getSize(), f.getBlockCount(), f.getBlockSize() / 1024,
 					f.getSectorCount(), f.getSectorSize()
-				));
+				);
 
 			} else {
-				PRINTFLN(("Detected flash chip of ID %02x, %02x, %02x - its geometry is unknown", id[0], id[1], id[2]));
+				INFO("Detected flash chip of ID %02x, %02x, %02x - its geometry is unknown", id[0], id[1], id[2]);
 			}
 
 		} else {
@@ -197,6 +202,35 @@ void Programmer::waitForWIPClearance(int timeoutMs) {
 }
 
 
+void Programmer::unlockChip() {
+	_verifyCommon(this->_flashInfo);
+
+	if (this->_flashInfo.getProtectMask() == 0) {
+		throw_Exception("Protect mask is note set!");
+	}
+
+	{
+		uint8_t protectMask = this->_flashInfo.getProtectMask();
+		uint8_t status;
+
+		this->cmdGetStatus(status);
+
+		if ((status & protectMask) != 0) {
+			this->cmdWriteEnable();
+			this->cmdWriteStatus(status & ~protectMask);
+
+			this->waitForWIPClearance(WRITE_STATUS_TIMEOUT_MS);
+
+			this->cmdGetStatus(status);
+
+			if ((status & protectMask) != 0) {
+				throw_Exception("Unable to unlock flash chip! Please check if WP pin is correctly polarized!");
+			}
+		}
+	}
+}
+
+
 void Programmer::eraseChip() {
 	TRACE(("call"));
 
@@ -204,6 +238,8 @@ void Programmer::eraseChip() {
 
 	this->cmdWriteEnable();
 	this->cmdEraseChip();
+
+	this->waitForWIPClearance(ERASE_CHIP_TIMEOUT_MS);
 }
 
 
@@ -214,6 +250,8 @@ void Programmer::eraseBlockByAddress(uint32_t address, bool skipIfErased) {
 
 	this->cmdWriteEnable();
 	this->cmdEraseBlock(address);
+
+	this->waitForWIPClearance(ERASE_BLOCK_TIMEOUT_MS);
 }
 
 
@@ -224,6 +262,8 @@ void Programmer::eraseBlockByNumber(int blockNo, bool skipIfErased) {
 
 	this->cmdWriteEnable();
 	this->cmdEraseBlock(blockNo * this->_flashInfo.getBlockSize());
+
+	this->waitForWIPClearance(ERASE_BLOCK_TIMEOUT_MS);
 }
 
 
@@ -234,6 +274,8 @@ void Programmer::eraseSectorByAddress(uint32_t address, bool skipIfErased) {
 
 	this->cmdWriteEnable();
 	this->cmdEraseSector(address);
+
+	this->waitForWIPClearance(ERASE_SECTOR_TIMEOUT_MS);
 }
 
 
@@ -244,6 +286,8 @@ void Programmer::eraseSectorByNumber(int sectorNo, bool skipIfErased) {
 
 	this->cmdWriteEnable();
 	this->cmdEraseSector(sectorNo * this->_flashInfo.getSectorSize());
+
+	this->waitForWIPClearance(ERASE_SECTOR_TIMEOUT_MS);
 }
 
 
@@ -365,6 +409,21 @@ void Programmer::cmdWriteEnable() {
 
 		msg.send()
 			.byte(0x06); // WREN
+	}
+
+	_spi.transfer(msgs);
+}
+
+
+void Programmer::cmdWriteStatus(uint8_t reg) {
+	Spi::Messages msgs;
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x01) // WRSR
+			.byte(reg);
 	}
 
 	_spi.transfer(msgs);

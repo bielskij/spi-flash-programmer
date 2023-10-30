@@ -3,10 +3,10 @@
 #include "serialProgrammer.h"
 
 #include "common/protocol.h"
-#include "firmware/programmer.h"
-#include "flashutil/exception.h"
 
-#define DEBUG 1
+#include "firmware/programmer.h"
+
+#include "flashutil/exception.h"
 #include "flashutil/debug.h"
 
 
@@ -200,7 +200,7 @@ struct SerialProgrammer::Impl {
 	void write(void *buffer, std::size_t bufferSize, int timeoutMs) {
 		uint8_t *bytes = reinterpret_cast<uint8_t *>(buffer);
 
-		DBG(("CALL for %zd bytes", bufferSize));
+		TRACE("CALL for %zd bytes", bufferSize);
 
 		for (size_t i = 0; i < bufferSize; i++) {
 			programmer_putByte(&this->programmer, bytes[i]);
@@ -208,7 +208,7 @@ struct SerialProgrammer::Impl {
 	}
 
 	void read(void *buffer, std::size_t bufferSize, int timeoutMs) {
-		DBG(("CALL, have %zd bytes, requested %zd bytes", this->outputBuffer.size(), bufferSize));
+		TRACE("CALL, have %zd bytes, requested %zd bytes", this->outputBuffer.size(), bufferSize);
 
 		if (outputBuffer.size() < bufferSize) {
 			throw_Exception("Not enough data in buffer!");
@@ -225,7 +225,7 @@ struct SerialProgrammer::Impl {
 	static void _programmerRequestCallback(ProtoReq *request, ProtoRes *response, void *callbackData) {
 		Impl *self = reinterpret_cast<Impl *>(callbackData);
 
-		DBG(("CALL"));
+		TRACE("CALL");
 
 		switch (request->cmd) {
 			case PROTO_CMD_SPI_TRANSFER:
@@ -237,7 +237,7 @@ struct SerialProgrammer::Impl {
 
 					self->flash.cs(true);
 
-					debug_dumpBuffer(req.txBuffer, req.txBufferSize, 32, 0);
+					HEX("Request data", req.txBuffer, req.txBufferSize);
 
 					for (uint16_t i = 0; i < std::max(req.txBufferSize, (uint16_t)(req.rxSkipSize + req.rxBufferSize)); i++) {
 						uint8_t received;
@@ -259,7 +259,7 @@ struct SerialProgrammer::Impl {
 					}
 
 					if (res.rxBufferSize > 0) {
-						debug_dumpBuffer(res.rxBuffer, res.rxBufferSize, 32, 0);
+						HEX("Response data", res.rxBuffer, res.rxBufferSize);
 					}
 
 					if ((req.flags & PROTO_SPI_TRANSFER_FLAG_KEEP_CS) == 0) {
@@ -276,7 +276,7 @@ struct SerialProgrammer::Impl {
 	static void _programmerResponseCallback(uint8_t *buffer, uint16_t bufferSize, void *callbackData) {
 		Impl *self = reinterpret_cast<Impl *>(callbackData);
 
-		DBG(("CALL"));
+		TRACE("CALL");
 
 		std::copy(buffer, buffer + bufferSize, std::back_inserter(self->outputBuffer));
 	}

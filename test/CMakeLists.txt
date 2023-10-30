@@ -5,6 +5,10 @@ project(unit_tests_project)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(NOT TARGET spdlog)
+	find_package(spdlog REQUIRED)
+endif()
+
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -54,7 +58,9 @@ target_include_directories(unit_tests
 )
 
 target_link_libraries(unit_tests
-	GTest::gtest_main
+	PRIVATE 
+		spdlog::spdlog $<$<BOOL:${MINGW}>:ws2_32>
+		GTest::gtest_main
 )
 
 include(GoogleTest)

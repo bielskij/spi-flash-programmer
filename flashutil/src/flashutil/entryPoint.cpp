@@ -3,8 +3,6 @@
 
 #include "flashutil/programmer.h"
 #include "flashutil/entryPoint.h"
-
-#define DEBUG 1
 #include "flashutil/debug.h"
 
 using namespace flashutil;
@@ -96,7 +94,7 @@ int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flash
 		programmer.end();
 
 	} catch (const std::exception &ex) {
-		PRINTFLN(("Got exception: %s", ex.what()));
+		ERROR("Got exception: %s", ex.what());
 
 		ret = RC_FAILURE;
 	}
@@ -106,6 +104,6 @@ int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flash
 
 
 bool EntryPoint::Parameters::isValid() const {
-	ERR(("TODO: Implement!"));
+	ERROR("TODO: Implement!");
 	return true;
 }

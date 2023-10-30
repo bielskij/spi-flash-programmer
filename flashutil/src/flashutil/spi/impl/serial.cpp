@@ -12,7 +12,6 @@
 #include "serial.h"
 #include "serial/serial.h"
 
-#define DEBUG 1
 #include "flashutil/debug.h"
 
 
@@ -76,7 +75,7 @@ struct SerialSpi::Impl {
 			size_t txWritten = 0;
 			size_t rxWritten = 0;
 
-			DBG(("rxSize: %zd, txSize: %zd, skipSize: %zd", rxSize, txSize, rxSkip));
+			DEBUG("rxSize: %zd, txSize: %zd, skipSize: %zd", rxSize, txSize, rxSkip);
 
 			while (rxSize > 0 || txSize > 0 || rxSkip > 0) {
 				executeCmd(
@@ -198,7 +197,7 @@ struct SerialSpi::Impl {
 			proto_req_encode(&request, packet.payload, packet.payloadSize);
 		}
 
-		debug_dumpBuffer(packetBuffer, proto_pkt_encode(&packet, packetBuffer, packetBufferSize), 32, 0);
+		HEX("Packet buffer", packetBuffer, packetBufferSize);
 
 		this->serial->write(packetBuffer, proto_pkt_encode(&packet, packetBuffer, packetBufferSize), TIMEOUT_MS);
 
@@ -241,7 +240,7 @@ struct SerialSpi::Impl {
 
 	void attach() {
 		executeCmd(PROTO_CMD_GET_INFO, {}, {}, [this](const ProtoRes &response) {
-			DBG(("version %hhu.%hhu, payload size: %hu", response.response.getInfo.version.major, response.response.getInfo.version.minor, response.response.getInfo.packetSize));
+			DEBUG("version %hhu.%hhu, payload size: %hu", response.response.getInfo.version.major, response.response.getInfo.version.minor, response.response.getInfo.packetSize);
 
 			this->packetBuffer = std::vector<uint8_t>(response.response.getInfo.packetSize);
 		}, TIMEOUT_MS);
