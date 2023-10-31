@@ -41,14 +41,18 @@ class DummyFlash {
 
 		static constexpr uint8_t CMD_RDID = 0x9f;
 		static constexpr uint8_t CMD_SE   = 0x20;
-		static constexpr uint8_t CMD_BE   = 0x52;
+		static constexpr uint8_t CMD_BE   = 0xd8;
 		static constexpr uint8_t CMD_CE   = 0x60;
+		static constexpr uint8_t CMD_RDSR = 0x05;
+		static constexpr uint8_t CMD_WREN = 0x06;
 
 	public:
 		DummyFlash(const Flash &geometry) : geometry(geometry), memory(geometry.getSize(), ERASED_BYTE) {
 			this->address        = 0;
 			this->parseState     = ParseState::READ_CMD;
 			this->cmdDescription = nullptr;
+			this->statusReg      = 0;
+			this->busyCounter    = 0;
 		}
 
 		uint8_t handleCmd(uint8_t byte) {
@@ -67,6 +71,12 @@ class DummyFlash {
 					}
 					break;
 
+				case CMD_RDSR:
+					{
+						ret = this->statusReg;
+					}
+					break;
+
 				default:
 					break;
 			}
@@ -79,6 +89,19 @@ class DummyFlash {
 
 			ParseState pendingState = this->parseState;
 
+			if (this->busyCounter > 0) {
+				this->busyCounter--;
+
+				if (this->busyCounter == 0) {
+					this->statusReg &= ~STATUS_FLAG_BUSY;
+					this->statusReg &= ~STATUS_FLAG_WEL;
+
+					this->memory = this->memoryPending;
+
+					HEX("Committed flash memory", this->memory.data(), this->memory.size());
+				}
+			}
+
 			switch (this->parseState) {
 				case ParseState::READ_CMD:
 					{
@@ -89,7 +112,7 @@ class DummyFlash {
 							if (this->cmdDescription->parametersSize) {
 								pendingState = ParseState::READ_DATA;
 
-							} else if (this->cmdDescription->hasResponse) {
+							} else {
 								pendingState = ParseState::HANDLE_CMD;
 							}
 						}
@@ -107,7 +130,12 @@ class DummyFlash {
 
 				case ParseState::HANDLE_CMD:
 					{
-						ret = handleCmd(byte);
+						if (this->cmdDescription->hasResponse) {
+							ret = handleCmd(byte);
+
+						} else {
+							pendingState = ParseState::IGNORE;
+						}
 					}
 					break;
 
@@ -128,6 +156,52 @@ class DummyFlash {
 		}
 
 		void cs(bool select) {
+			if (! select) {
+				if (this->parseState == ParseState::HANDLE_CMD) {
+					switch (this->cmdDescription->code) {
+						case CMD_SE:
+						case CMD_BE:
+						case CMD_CE:
+							{
+								uint32_t address = 0;
+								uint32_t size;
+
+								if (this->cmdDescription->code == CMD_CE) {
+									address = 0;
+									size    = this->geometry.getSize();
+
+								} else {
+									address = (this->cmdData[0] << 16) | (this->cmdData[1] << 8) | (this->cmdData[2]);
+
+									if (this->cmdDescription->code == CMD_BE) {
+										size = this->geometry.getBlockSize();
+
+									} else {
+										size = this->geometry.getSectorSize();
+									}
+								}
+
+								this->memoryPending = this->memory;
+
+								std::fill(this->memoryPending.begin() + address, this->memoryPending.begin() + address + size, ERASED_BYTE);
+
+								this->statusReg  |= STATUS_FLAG_BUSY;
+								this->busyCounter = 40;
+							}
+							break;
+
+						case CMD_WREN:
+							{
+								this->statusReg |= STATUS_FLAG_WEL;
+							}
+							break;
+
+						default:
+							break;
+					}
+				}
+			}
+
 			this->parseState     = ParseState::READ_CMD;
 			this->cmdDescription = nullptr;
 			this->cmdData.clear();
@@ -145,6 +219,8 @@ class DummyFlash {
 			ret.emplace(CMD_CE,   CmdDescription(CMD_CE,   0, false));
 			ret.emplace(CMD_BE,   CmdDescription(CMD_BE,   3, false));
 			ret.emplace(CMD_SE,   CmdDescription(CMD_SE,   3, false));
+			ret.emplace(CMD_RDSR, CmdDescription(CMD_RDSR, 0, true));
+			ret.emplace(CMD_WREN, CmdDescription(CMD_WREN, 0, false));
 
 			return ret;
 		}
@@ -158,6 +234,8 @@ class DummyFlash {
 		ParseState           parseState;
 		std::vector<uint8_t> cmdData;
 		CmdDescription      *cmdDescription;
+		uint8_t              statusReg;
+		uint8_t              busyCounter;
 
 		static std::map<uint8_t, CmdDescription> cmdsDescription;
 };
@@ -166,6 +244,8 @@ constexpr uint8_t DummyFlash::CMD_RDID;
 constexpr uint8_t DummyFlash::CMD_SE;
 constexpr uint8_t DummyFlash::CMD_BE;
 constexpr uint8_t DummyFlash::CMD_CE;
+constexpr uint8_t DummyFlash::CMD_RDSR;
+constexpr uint8_t DummyFlash::CMD_WREN;
 
 const uint8_t DummyFlash::ERASED_BYTE = 0xff;
 const uint8_t DummyFlash::INVALID_CMD = 0xff;
@@ -200,16 +280,12 @@ struct SerialProgrammer::Impl {
 	void write(void *buffer, std::size_t bufferSize, int timeoutMs) {
 		uint8_t *bytes = reinterpret_cast<uint8_t *>(buffer);
 
-		TRACE("CALL for %zd bytes", bufferSize);
-
 		for (size_t i = 0; i < bufferSize; i++) {
 			programmer_putByte(&this->programmer, bytes[i]);
 		}
 	}
 
 	void read(void *buffer, std::size_t bufferSize, int timeoutMs) {
-		TRACE("CALL, have %zd bytes, requested %zd bytes", this->outputBuffer.size(), bufferSize);
-
 		if (outputBuffer.size() < bufferSize) {
 			throw_Exception("Not enough data in buffer!");
 		}
