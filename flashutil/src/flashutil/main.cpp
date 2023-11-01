@@ -254,15 +254,18 @@ int main(int argc, char *argv[]) {
 				params.verify = true;
 			}
 
-			if (vm.count(OPT_UNPROTECT)) {
-				params.unprotectIfNeeded = true;
-			}
-
 			if (vm.count(OPT_OMIT_REDUNDANT_OPS)) {
 				params.omitRedundantWrites = true;
 			}
 
 			std::vector<flashutil::EntryPoint::Parameters> operations;
+
+			if (vm.count(OPT_UNPROTECT)) {
+				params.mode      = flashutil::EntryPoint::Mode::CHIP;
+				params.operation = flashutil::EntryPoint::Operation::UNLOCK;
+
+				operations.push_back(params);
+			}
 
 			// Erase
 			{

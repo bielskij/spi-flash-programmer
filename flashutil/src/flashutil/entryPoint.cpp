@@ -36,6 +36,13 @@ static OperationHandlers _getHandlers() {
 			};
 		}
 
+		op = EntryPoint::Operation::UNLOCK;
+		{
+			ret[op][EntryPoint::Mode::CHIP] = [](Programmer &programmer, const EntryPoint::Parameters &params) {
+				programmer.unlockChip();
+			};
+		}
+
 		op = EntryPoint::Operation::WRITE;
 		{
 

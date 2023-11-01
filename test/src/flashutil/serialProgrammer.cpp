@@ -45,13 +45,14 @@ class DummyFlash {
 		static constexpr uint8_t CMD_CE   = 0x60;
 		static constexpr uint8_t CMD_RDSR = 0x05;
 		static constexpr uint8_t CMD_WREN = 0x06;
+		static constexpr uint8_t CMD_WRSR = 0x01;
 
 	public:
 		DummyFlash(const Flash &geometry) : geometry(geometry), memory(geometry.getSize(), ERASED_BYTE) {
 			this->address        = 0;
 			this->parseState     = ParseState::READ_CMD;
 			this->cmdDescription = nullptr;
-			this->statusReg      = 0;
+			this->statusReg      = geometry.getProtectMask();
 			this->busyCounter    = 0;
 		}
 
@@ -196,6 +197,14 @@ class DummyFlash {
 							}
 							break;
 
+						case CMD_WRSR:
+							{
+								if ((this->statusReg & STATUS_FLAG_WEL) != 0) {
+									this->statusReg = (this->cmdData[0] & 0xfc) | (this->statusReg & 0x03);
+								}
+							}
+							break;
+
 						default:
 							break;
 					}
@@ -221,6 +230,7 @@ class DummyFlash {
 			ret.emplace(CMD_SE,   CmdDescription(CMD_SE,   3, false));
 			ret.emplace(CMD_RDSR, CmdDescription(CMD_RDSR, 0, true));
 			ret.emplace(CMD_WREN, CmdDescription(CMD_WREN, 0, false));
+			ret.emplace(CMD_WRSR, CmdDescription(CMD_WRSR, 1, false));
 
 			return ret;
 		}
@@ -246,6 +256,7 @@ constexpr uint8_t DummyFlash::CMD_BE;
 constexpr uint8_t DummyFlash::CMD_CE;
 constexpr uint8_t DummyFlash::CMD_RDSR;
 constexpr uint8_t DummyFlash::CMD_WREN;
+constexpr uint8_t DummyFlash::CMD_WRSR;
 
 const uint8_t DummyFlash::ERASED_BYTE = 0xff;
 const uint8_t DummyFlash::INVALID_CMD = 0xff;

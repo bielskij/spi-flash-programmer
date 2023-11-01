@@ -12,10 +12,6 @@
 #include "flashutil/flash/builder.h"
 #include "flashutil/debug.h"
 
-// TODO: Each chip should define mask for those flags
-#define STATUS_FLAG_WLE 0x02
-#define STATUS_FLAG_WIP 0x01
-
 #define ERASE_CHIP_TIMEOUT_MS    30000
 #define ERASE_BLOCK_TIMEOUT_MS   10000
 #define ERASE_SECTOR_TIMEOUT_MS    500
@@ -206,7 +202,7 @@ void Programmer::unlockChip() {
 	_verifyCommon(this->_flashInfo);
 
 	if (this->_flashInfo.getProtectMask() == 0) {
-		throw_Exception("Protect mask is note set!");
+		throw_Exception("Protect mask is not set!");
 	}
 
 	{
@@ -216,16 +212,22 @@ void Programmer::unlockChip() {
 		this->cmdGetStatus(status);
 
 		if ((status & protectMask) != 0) {
+			INFO("Unlocking flash chip");
+
 			this->cmdWriteEnable();
 			this->cmdWriteStatus(status & ~protectMask);
 
 			this->waitForWIPClearance(WRITE_STATUS_TIMEOUT_MS);
 
+			if (this->)
 			this->cmdGetStatus(status);
 
 			if ((status & protectMask) != 0) {
 				throw_Exception("Unable to unlock flash chip! Please check if WP pin is correctly polarized!");
 			}
+
+		} else {
+			INFO("Flash chip is already unlocked");
 		}
 	}
 }

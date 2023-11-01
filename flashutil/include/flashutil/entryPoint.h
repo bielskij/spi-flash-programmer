@@ -25,7 +25,8 @@ namespace flashutil {
 
 				READ,
 				WRITE,
-				ERASE
+				ERASE,
+				UNLOCK
 			};
 
 			struct Parameters {
@@ -35,7 +36,6 @@ namespace flashutil {
 				Operation operation;
 
 				bool omitRedundantWrites;
-				bool unprotectIfNeeded;
 				bool verify;
 
 				std::istream *inStream;
@@ -46,7 +46,6 @@ namespace flashutil {
 					this->mode                = Mode::NONE;
 					this->operation           = Operation::NO_OPERATION;
 					this->omitRedundantWrites = false;
-					this->unprotectIfNeeded   = false;
 					this->verify              = false;
 					this->inStream            = nullptr;
 					this->outStream           = nullptr;

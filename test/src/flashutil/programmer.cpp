@@ -44,14 +44,38 @@ TEST(flashutil, programmer_connect) {
 	FlashRegistry registry;
 
 	{
-		flashutil::EntryPoint::Parameters params;
+		std::vector<flashutil::EntryPoint::Parameters> operations;
 
-		params.index             = 1;
-		params.mode              = flashutil::EntryPoint::Mode::BLOCK;
-		params.operation         = flashutil::EntryPoint::Operation::ERASE;
-		params.unprotectIfNeeded = true;
-		params.verify            = true;
+		// unlock
+		{
+			flashutil::EntryPoint::Parameters params;
 
-		flashutil::EntryPoint::call(*spi.get(), registry, serial->getFlashInfo(), params);
+			params.mode                = flashutil::EntryPoint::Mode::CHIP;
+			params.operation           = flashutil::EntryPoint::Operation::UNLOCK;
+			params.omitRedundantWrites = true;
+			params.verify              = true;
+
+			operations.push_back(params);
+		}
+
+		// Erase
+		{
+			flashutil::EntryPoint::Parameters params;
+
+			params.index               = 1;
+			params.mode                = flashutil::EntryPoint::Mode::BLOCK;
+			params.operation           = flashutil::EntryPoint::Operation::ERASE;
+			params.omitRedundantWrites = true;
+			params.verify              = true;
+
+			operations.push_back(params);
+		}
+
+		// Write
+		{
+			flashu
+		}
+
+		flashutil::EntryPoint::call(*spi.get(), registry, serial->getFlashInfo(), operations);
 	}
 }
