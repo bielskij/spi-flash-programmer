@@ -27,6 +27,9 @@ Flash::Flash(const std::string &name, const std::vector<uint8_t> &jedecId, size_
 	this->setSectorSize(sectorSize);
 	this->setSectorCount(nSectors);
 	this->setProtectMask(protectMask);
+
+	this->setPageSize(256);
+	this->setPageCount(this->getSize() / this->getPageSize());
 }
 
 

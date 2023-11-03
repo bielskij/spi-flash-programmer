@@ -21,14 +21,16 @@ class DummyFlash {
 		};
 
 		struct CmdDescription {
-			int     parametersSize;
-			bool    hasResponse;
-			uint8_t code;
+			int        parametersSize;
+			bool       hasResponse;
+			uint8_t    code;
+			ParseState stateOnOverflow;
 
-			CmdDescription(uint8_t code, int parametersSize, bool hasResponse) {
-				this->parametersSize = parametersSize;
-				this->hasResponse    = hasResponse;
-				this->code           = code;
+			CmdDescription(uint8_t code, int parametersSize, bool hasResponse, ParseState stateOnOverflow) {
+				this->parametersSize  = parametersSize;
+				this->hasResponse     = hasResponse;
+				this->code            = code;
+				this->stateOnOverflow = stateOnOverflow;
 			}
 		};
 
@@ -46,6 +48,7 @@ class DummyFlash {
 		static constexpr uint8_t CMD_RDSR = 0x05;
 		static constexpr uint8_t CMD_WREN = 0x06;
 		static constexpr uint8_t CMD_WRSR = 0x01;
+		static constexpr uint8_t CMD_PP   = 0x02;
 
 	public:
 		DummyFlash(const Flash &geometry) : geometry(geometry), memory(geometry.getSize(), ERASED_BYTE) {
@@ -135,7 +138,7 @@ class DummyFlash {
 							ret = handleCmd(byte);
 
 						} else {
-							pendingState = ParseState::IGNORE;
+							pendingState = this->cmdDescription->stateOnOverflow;
 						}
 					}
 					break;
@@ -205,15 +208,30 @@ class DummyFlash {
 							}
 							break;
 
+						case CMD_PP:
+							{
+								if ((this->statusReg & STATUS_FLAG_WEL) != 0) {
+									uint32_t address = (this->cmdData[0] << 16) | (this->cmdData[1] << 8) | (this->cmdData[2]);
+
+									this->memoryPending = this->memory;
+
+									std::copy(this->cmdData.begin() + 3, this->cmdData.end(), this->memoryPending.begin() + address);
+
+									this->statusReg  |= STATUS_FLAG_BUSY;
+									this->busyCounter = 10;
+								}
+							}
+							break;
+
 						default:
 							break;
 					}
 				}
-			}
 
-			this->parseState     = ParseState::READ_CMD;
-			this->cmdDescription = nullptr;
-			this->cmdData.clear();
+				this->parseState     = ParseState::READ_CMD;
+				this->cmdDescription = nullptr;
+				this->cmdData.clear();
+			}
 		}
 
 		const Flash &getGeometry() const {
@@ -224,13 +242,14 @@ class DummyFlash {
 		static std::map<uint8_t, CmdDescription> _initDescriptions() {
 			std::map<uint8_t, CmdDescription> ret;
 
-			ret.emplace(CMD_RDID, CmdDescription(CMD_RDID, 0, true));
-			ret.emplace(CMD_CE,   CmdDescription(CMD_CE,   0, false));
-			ret.emplace(CMD_BE,   CmdDescription(CMD_BE,   3, false));
-			ret.emplace(CMD_SE,   CmdDescription(CMD_SE,   3, false));
-			ret.emplace(CMD_RDSR, CmdDescription(CMD_RDSR, 0, true));
-			ret.emplace(CMD_WREN, CmdDescription(CMD_WREN, 0, false));
-			ret.emplace(CMD_WRSR, CmdDescription(CMD_WRSR, 1, false));
+			ret.emplace(CMD_RDID, CmdDescription(CMD_RDID,     0, true,  ParseState::IGNORE));
+			ret.emplace(CMD_CE,   CmdDescription(CMD_CE,       0, false, ParseState::IGNORE));
+			ret.emplace(CMD_BE,   CmdDescription(CMD_BE,       3, false, ParseState::IGNORE));
+			ret.emplace(CMD_SE,   CmdDescription(CMD_SE,       3, false, ParseState::IGNORE));
+			ret.emplace(CMD_RDSR, CmdDescription(CMD_RDSR,     0, true,  ParseState::IGNORE));
+			ret.emplace(CMD_WREN, CmdDescription(CMD_WREN,     0, false, ParseState::IGNORE));
+			ret.emplace(CMD_WRSR, CmdDescription(CMD_WRSR,     1, false, ParseState::IGNORE));
+			ret.emplace(CMD_PP,   CmdDescription(CMD_PP,      19, false, ParseState::HANDLE_CMD));
 
 			return ret;
 		}
@@ -257,6 +276,7 @@ constexpr uint8_t DummyFlash::CMD_CE;
 constexpr uint8_t DummyFlash::CMD_RDSR;
 constexpr uint8_t DummyFlash::CMD_WREN;
 constexpr uint8_t DummyFlash::CMD_WRSR;
+constexpr uint8_t DummyFlash::CMD_PP;
 
 const uint8_t DummyFlash::ERASED_BYTE = 0xff;
 const uint8_t DummyFlash::INVALID_CMD = 0xff;

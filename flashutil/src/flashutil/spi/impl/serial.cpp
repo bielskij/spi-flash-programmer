@@ -107,6 +107,10 @@ struct SerialSpi::Impl {
 								rxSize -= remain;
 							}
 						}
+
+						if (rxSize > 0 || txSize > 0 || rxSkip > 0) {
+							t.flags |= PROTO_SPI_TRANSFER_FLAG_KEEP_CS;
+						}
 					},
 
 					[&txWritten, &msg](ProtoReq &request) {

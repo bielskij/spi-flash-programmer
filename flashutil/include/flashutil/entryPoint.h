@@ -1,6 +1,8 @@
 #ifndef FLASHUTIL_ENTRYPOINT_H_
 #define FLASHUTIL_ENTRYPOINT_H_
 
+#include <iostream>
+
 #include "flashutil/flash/registry.h"
 #include "flashutil/flash.h"
 #include "flashutil/spi.h"

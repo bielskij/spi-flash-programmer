@@ -8,7 +8,7 @@ Spi::Message::SendOpts &Spi::Message::SendOpts::byte(uint8_t byte) {
 }
 
 
-Spi::Message::SendOpts &Spi::Message::SendOpts::data(uint8_t *data, std::size_t dataSize) {
+Spi::Message::SendOpts &Spi::Message::SendOpts::data(const uint8_t *data, std::size_t dataSize) {
 	std::copy(data, data + dataSize, std::back_inserter(this->_data));
 
 	return *this;

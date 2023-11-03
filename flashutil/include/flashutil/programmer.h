@@ -8,8 +8,11 @@
 #ifndef PROGRAMMER_H_
 #define PROGRAMMER_H_
 
+#include <vector>
+
 #include "spi.h"
-#include "flash/registry.h"
+#include "flashutil/flash/registry.h"
+#include "flashutil/flash/status.h"
 
 
 class Programmer {
@@ -20,17 +23,20 @@ class Programmer {
 		void begin(const Flash *defaultGeometry);
 		void end();
 
-		void unlockChip();
-
 		void eraseChip();
 
-		void eraseBlockByAddress(uint32_t address, bool skipIfErased);
-		void eraseBlockByNumber(int blockNo, bool skipIfErased);
+		void eraseBlockByAddress(uint32_t address);
+		void eraseBlockByNumber(int blockNo);
 
-		void eraseSectorByAddress(uint32_t addres, bool skipIfErased);
-		void eraseSectorByNumber(int sectorNo, bool skipIfErased);
+		void eraseSectorByAddress(uint32_t addres);
+		void eraseSectorByNumber(int sectorNo);
+
+		void writePage(uint32_t address, const std::vector<uint8_t> &page);
 
 		const Flash &getFlashInfo() const;
+
+		FlashStatus getFlashStatus();
+		FlashStatus setFlashStatus(const FlashStatus &status);
 
 	private:
 		void verifyFlashInfoAreaByAddress(uint32_t address, size_t size, size_t alignment);
@@ -38,15 +44,16 @@ class Programmer {
 		void verifyFlashInfoSectorNo(int sectorNo);
 
 		bool checkErased(uint32_t address, size_t size);
-		void waitForWIPClearance(int timeoutMs);
+		FlashStatus waitForWIPClearance(int timeoutMs);
 
 		void cmdEraseChip();
 		void cmdEraseBlock(uint32_t address);
 		void cmdEraseSector(uint32_t address);
 		void cmdGetInfo(std::vector<uint8_t> &id);
-		void cmdGetStatus(uint8_t &reg);
+		void cmdGetStatus(FlashStatus &status);
+		void cmdWriteStatus(const FlashStatus &status);
 		void cmdWriteEnable();
-		void cmdWriteStatus(uint8_t reg);
+		void cmdWritePage(uint32_t address, const std::vector<uint8_t> &page);
 		void cmdFlashReadBegin(uint32_t address);
 
 	private:

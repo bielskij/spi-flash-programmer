@@ -12,6 +12,7 @@
 
 class FlashStatus {
 	public:
+		FlashStatus();
 		FlashStatus(uint8_t status);
 
 		bool isWriteEnableLatchSet() const;
@@ -21,6 +22,10 @@ class FlashStatus {
 		void setBusy(bool busy);
 
 		uint8_t getRegisterValue() const;
+		void    setRegisterValue(uint8_t value);
+
+		bool isProtected(uint8_t mask) const;
+		void unprotect(uint8_t mask);
 
 	private:
 		uint8_t _reg;

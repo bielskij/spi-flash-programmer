@@ -46,12 +46,22 @@ TEST(flashutil, programmer_connect) {
 	{
 		std::vector<flashutil::EntryPoint::Parameters> operations;
 
+		std::istringstream inStream;
+
+		{
+			std::string data;
+
+			data.append(32, 0);
+
+			inStream.str(data);
+		}
+
 		// unlock
 		{
 			flashutil::EntryPoint::Parameters params;
 
-			params.mode                = flashutil::EntryPoint::Mode::CHIP;
 			params.operation           = flashutil::EntryPoint::Operation::UNLOCK;
+			params.mode                = flashutil::EntryPoint::Mode::CHIP;
 			params.omitRedundantWrites = true;
 			params.verify              = true;
 
@@ -62,9 +72,9 @@ TEST(flashutil, programmer_connect) {
 		{
 			flashutil::EntryPoint::Parameters params;
 
-			params.index               = 1;
-			params.mode                = flashutil::EntryPoint::Mode::BLOCK;
 			params.operation           = flashutil::EntryPoint::Operation::ERASE;
+			params.mode                = flashutil::EntryPoint::Mode::BLOCK;
+			params.index               = 1;
 			params.omitRedundantWrites = true;
 			params.verify              = true;
 
@@ -73,7 +83,22 @@ TEST(flashutil, programmer_connect) {
 
 		// Write
 		{
-			flashu
+			flashutil::EntryPoint::Parameters params;
+
+			params.operation           = flashutil::EntryPoint::Operation::WRITE;
+			params.mode                = flashutil::EntryPoint::Mode::SECTOR;
+			params.index               = (serial->getFlashInfo().getBlockSize() / serial->getFlashInfo().getSectorSize()) + 1;
+			params.omitRedundantWrites = true;
+			params.verify              = true;
+
+			params.inStream = &inStream;
+
+			operations.push_back(params);
+		}
+
+		// Read
+		{
+
 		}
 
 		flashutil::EntryPoint::call(*spi.get(), registry, serial->getFlashInfo(), operations);

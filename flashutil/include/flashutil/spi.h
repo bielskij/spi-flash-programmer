@@ -38,7 +38,7 @@ class Spi {
 				class SendOpts {
 					public:
 						SendOpts &byte(uint8_t byte);
-						SendOpts &data(uint8_t *data, std::size_t dataSize);
+						SendOpts &data(const uint8_t *data, std::size_t dataSize);
 						SendOpts &dummy();
 
 						std::size_t getBytes() const;

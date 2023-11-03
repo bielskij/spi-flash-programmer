@@ -88,6 +88,23 @@ const Flash &Programmer::getFlashInfo() const {
 }
 
 
+FlashStatus Programmer::getFlashStatus() {
+	FlashStatus status;
+
+	this->cmdGetStatus(status);
+
+	return status;
+}
+
+
+FlashStatus Programmer::setFlashStatus(const FlashStatus &status) {
+	this->cmdWriteEnable();
+	this->cmdWriteStatus(status);
+
+	return this->waitForWIPClearance(WRITE_STATUS_TIMEOUT_MS);
+}
+
+
 static void _verifyCommon(const Flash &info) {
 	if (! info.isValid()) {
 		throw std::runtime_error("Flash info is incomplete or invalid!");
@@ -167,16 +184,17 @@ bool Programmer::checkErased(uint32_t address, size_t size) {
 }
 
 
-void Programmer::waitForWIPClearance(int timeoutMs) {
-	bool wipOn = true;
+FlashStatus Programmer::waitForWIPClearance(int timeoutMs) {
+	FlashStatus ret;
 
-	while (wipOn && (timeoutMs > 0)) {
+	ret.setBusy(true);
+
+	while (ret.isWriteInProgress() && (timeoutMs > 0)) {
 		uint8_t statusReg;
 
-		this->cmdGetStatus(statusReg);
+		this->cmdGetStatus(ret);
 
-		wipOn = ((statusReg & STATUS_FLAG_WIP) != 0);
-		if (wipOn) {
+		if (ret.isWriteInProgress()) {
 			int interval = std::min(timeoutMs, 10);
 
 			{
@@ -192,44 +210,11 @@ void Programmer::waitForWIPClearance(int timeoutMs) {
 		}
 	}
 
-	if (wipOn) {
+	if (ret.isWriteInProgress()) {
 		throw std::runtime_error("Waiting for WIP flag clearance has timed out!");
 	}
-}
 
-
-void Programmer::unlockChip() {
-	_verifyCommon(this->_flashInfo);
-
-	if (this->_flashInfo.getProtectMask() == 0) {
-		throw_Exception("Protect mask is not set!");
-	}
-
-	{
-		uint8_t protectMask = this->_flashInfo.getProtectMask();
-		uint8_t status;
-
-		this->cmdGetStatus(status);
-
-		if ((status & protectMask) != 0) {
-			INFO("Unlocking flash chip");
-
-			this->cmdWriteEnable();
-			this->cmdWriteStatus(status & ~protectMask);
-
-			this->waitForWIPClearance(WRITE_STATUS_TIMEOUT_MS);
-
-			if (this->)
-			this->cmdGetStatus(status);
-
-			if ((status & protectMask) != 0) {
-				throw_Exception("Unable to unlock flash chip! Please check if WP pin is correctly polarized!");
-			}
-
-		} else {
-			INFO("Flash chip is already unlocked");
-		}
-	}
+	return ret;
 }
 
 
@@ -245,8 +230,8 @@ void Programmer::eraseChip() {
 }
 
 
-void Programmer::eraseBlockByAddress(uint32_t address, bool skipIfErased) {
-	TRACE(("call"));
+void Programmer::eraseBlockByAddress(uint32_t address) {
+	TRACE("call");
 
 	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getBlockSize(), this->_flashInfo.getBlockSize());
 
@@ -257,20 +242,13 @@ void Programmer::eraseBlockByAddress(uint32_t address, bool skipIfErased) {
 }
 
 
-void Programmer::eraseBlockByNumber(int blockNo, bool skipIfErased) {
-	TRACE(("call"));
-
-	this->verifyFlashInfoBlockNo(blockNo);
-
-	this->cmdWriteEnable();
-	this->cmdEraseBlock(blockNo * this->_flashInfo.getBlockSize());
-
-	this->waitForWIPClearance(ERASE_BLOCK_TIMEOUT_MS);
+void Programmer::eraseBlockByNumber(int blockNo) {
+	this->eraseBlockByAddress(blockNo * this->_flashInfo.getBlockSize());
 }
 
 
-void Programmer::eraseSectorByAddress(uint32_t address, bool skipIfErased) {
-	TRACE(("call"));
+void Programmer::eraseSectorByAddress(uint32_t address) {
+	TRACE("call");
 
 	this->verifyFlashInfoAreaByAddress(address, this->_flashInfo.getSectorSize(), this->_flashInfo.getSectorSize());
 
@@ -281,13 +259,18 @@ void Programmer::eraseSectorByAddress(uint32_t address, bool skipIfErased) {
 }
 
 
-void Programmer::eraseSectorByNumber(int sectorNo, bool skipIfErased) {
-	TRACE(("call"));
+void Programmer::eraseSectorByNumber(int sectorNo) {
+	this->eraseSectorByAddress(sectorNo * this->_flashInfo.getSectorSize());
+}
 
-	this->verifyFlashInfoSectorNo(sectorNo);
+
+void Programmer::writePage(uint32_t address, const std::vector<uint8_t> &page) {
+	TRACE("call, address %08x, buffer: %p, size: %zd", address, page.data(), page.size());
+
+	this->verifyFlashInfoAreaByAddress(address, page.size(), this->_flashInfo.getPageSize());
 
 	this->cmdWriteEnable();
-	this->cmdEraseSector(sectorNo * this->_flashInfo.getSectorSize());
+	this->cmdWritePage(address, page);
 
 	this->waitForWIPClearance(ERASE_SECTOR_TIMEOUT_MS);
 }
@@ -379,7 +362,7 @@ void Programmer::cmdGetInfo(std::vector<uint8_t> &id) {
 }
 
 
-void Programmer::cmdGetStatus(uint8_t &reg) {
+void Programmer::cmdGetStatus(FlashStatus &status) {
 	Spi::Messages msgs;
 
 	TRACE(("call"));
@@ -397,7 +380,7 @@ void Programmer::cmdGetStatus(uint8_t &reg) {
 
 	_spi.transfer(msgs);
 
-	reg = msgs.at(0).recv().at(0);
+	status = FlashStatus(msgs.at(0).recv().at(0));
 }
 
 
@@ -417,7 +400,29 @@ void Programmer::cmdWriteEnable() {
 }
 
 
-void Programmer::cmdWriteStatus(uint8_t reg) {
+void Programmer::cmdWritePage(uint32_t address, const std::vector<uint8_t> &page) {
+	Spi::Messages msgs;
+
+	TRACE(("call"));
+
+	{
+		auto &msg = msgs.add();
+
+		msg.send()
+			.byte(0x02) // PP
+
+			.byte((address >> 16) & 0xff)
+			.byte((address >>  8) & 0xff)
+			.byte((address >>  0) & 0xff)
+
+			.data(page.data(), page.size());
+	}
+
+	_spi.transfer(msgs);
+}
+
+
+void Programmer::cmdWriteStatus(const FlashStatus &status) {
 	Spi::Messages msgs;
 
 	{
@@ -425,7 +430,7 @@ void Programmer::cmdWriteStatus(uint8_t reg) {
 
 		msg.send()
 			.byte(0x01) // WRSR
-			.byte(reg);
+			.byte(status.getRegisterValue());
 	}
 
 	_spi.transfer(msgs);
