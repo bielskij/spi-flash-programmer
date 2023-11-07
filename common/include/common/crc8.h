@@ -1,3 +1,10 @@
+/*
+ * common/crc8.h
+ *
+ *  Created on: 27 lut 2022
+ *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
+ */
+
 #ifndef COMMON_INCLUDE_CRC8_H_
 #define COMMON_INCLUDE_CRC8_H_
 

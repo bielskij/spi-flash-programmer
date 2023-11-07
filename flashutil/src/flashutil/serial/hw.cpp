@@ -8,7 +8,7 @@
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/bind.hpp>
 
-#include "serial.h"
+#include "flashutil/serial/hw.h"
 
 #include "flashutil/exception.h"
 #include "flashutil/debug.h"
@@ -100,6 +100,11 @@ HwSerial::HwSerial(const std::string &serialPath, int baud) {
 #endif
 
 	this->_flush();
+}
+
+
+HwSerial::~HwSerial() {
+
 }
 
 

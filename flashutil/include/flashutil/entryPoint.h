@@ -44,6 +44,9 @@ namespace flashutil {
 				std::istream *inStream;
 				std::ostream *outStream;
 
+				std::function<void(const Parameters &)> beforeExecution;
+				std::function<void(const Parameters &)> afterExecution;
+
 				Parameters() {
 					this->index               = -1;
 					this->mode                = Mode::NONE;

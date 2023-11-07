@@ -233,6 +233,8 @@ void Programmer::writePage(uint32_t address, const std::vector<uint8_t> &page) {
 std::vector<uint8_t> Programmer::read(uint32_t address, size_t size) {
 	this->verifyFlashInfoAreaByAddress(address, size, 1);
 
+	TRACE("call, address %08x, size: %zd", address, size);
+
 	this->cmdFlashReadBegin(address);
 
 	{

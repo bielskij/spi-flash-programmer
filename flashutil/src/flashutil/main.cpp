@@ -10,7 +10,6 @@
 #include <boost/program_options.hpp>
 
 #include "flashutil/entryPoint.h"
-#include "flashutil/spi/creator.h"
 #include "flashutil/flash/builder.h"
 #include "flashutil/flash/registry.h"
 #include "flashutil/debug.h"
@@ -260,6 +259,7 @@ int main(int argc, char *argv[]) {
 
 			std::vector<flashutil::EntryPoint::Parameters> operations;
 
+			// Unlock
 			if (vm.count(OPT_UNPROTECT)) {
 				params.mode      = flashutil::EntryPoint::Mode::CHIP;
 				params.operation = flashutil::EntryPoint::Operation::UNLOCK;

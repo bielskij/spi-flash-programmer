@@ -8,17 +8,31 @@
 #ifndef FLASHUTIL_SPI_SERIAL_H_
 #define FLASHUTIL_SPI_SERIAL_H_
 
-#include <memory>
 #include <string>
+#include <memory>
 
-class Serial {
-	public:
-		virtual ~Serial() {
-		}
+#include "flashutil/spi.h"
+#include "flashutil/serial.h"
 
+class SerialSpi : public Spi {
 	public:
-		virtual void write(void *buffer, std::size_t bufferSize, int timeoutMs) = 0;
-		virtual void read(void *buffer, std::size_t bufferSize, int timeoutMs)  = 0;
+		SerialSpi(Serial &serial);
+		~SerialSpi();
+
+		void transfer(Messages &msgs) override;
+		void chipSelect(bool select) override;
+
+		Config getConfig() override;
+		void   setConfig(const Config &config) override;
+
+		const Capabilities &getCapabilities() const override;
+		void attach() override;
+		void detach() override;
+
+	private:
+		class Impl;
+
+		std::unique_ptr<Impl> self;
 };
 
 #endif /* FLASHUTIL_SPI_SERIAL_H_ */

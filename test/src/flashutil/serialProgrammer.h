@@ -14,8 +14,6 @@ class SerialProgrammer : public Serial {
 		virtual void write(void *buffer, std::size_t bufferSize, int timeoutMs) override;
 		virtual void read(void *buffer, std::size_t bufferSize, int timeoutMs) override;
 
-		const Flash &getFlashInfo();
-
 	private:
 		class Impl;
 

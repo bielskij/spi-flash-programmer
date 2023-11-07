@@ -5,17 +5,18 @@
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef SPI_IMPL_SERIAL_SERIAL_H_
-#define SPI_IMPL_SERIAL_SERIAL_H_
+#ifndef FLASHUTIL_SERIAL_HW_H_
+#define FLASHUTIL_SERIAL_HW_H_
 
 #include <memory>
 #include <string>
 
-#include "flashutil/spi/serial.h"
+#include "flashutil/serial.h"
 
 class HwSerial : public Serial {
 	public:
 		HwSerial(const std::string &serialPath, int baud);
+		~HwSerial();
 
 	public:
 		void write(void *buffer, std::size_t bufferSize, int timeoutMs) override;
@@ -30,4 +31,4 @@ class HwSerial : public Serial {
 		std::unique_ptr<Impl> self;
 };
 
-#endif /* SPI_IMPL_SERIAL_SERIAL_H_ */
+#endif /* FLASHUTIL_SERIAL_HW_H_ */

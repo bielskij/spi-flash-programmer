@@ -101,6 +101,8 @@ static OperationHandlers _getHandlers() {
 						break;
 				}
 
+				INFO("Writing data at %08x", address);
+
 				{
 					std::vector<uint8_t> page(flashInfo.getPageSize(), 0xff);
 
@@ -145,6 +147,8 @@ static OperationHandlers _getHandlers() {
 				}
 
 				address *= size;
+
+				INFO("Reading flash area of size %zd at %08x", size, address);
 
 				while (read != size) {
 					size_t toReadSize = std::min(flashInfo.getBlockSize(), size - read);
@@ -193,6 +197,10 @@ int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flash
 		programmer.begin(flashGeometry.isGeometryValid() ? &flashGeometry : nullptr);
 		{
 			for (const auto &p : parameters) {
+				if (p.beforeExecution) {
+					p.beforeExecution(p);
+				}
+
 				if (p.mode != Mode::NONE && p.operation != Operation::NO_OPERATION) {
 					auto handler = _getHandler(p);
 					if (handler) {
@@ -203,6 +211,10 @@ int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flash
 					if (p.flashInfo != nullptr) {
 						*p.flashInfo = programmer.getFlashInfo();
 					}
+				}
+
+				if (p.afterExecution) {
+					p.afterExecution(p);
 				}
 			}
 		}

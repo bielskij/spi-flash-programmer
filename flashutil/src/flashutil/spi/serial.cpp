@@ -8,9 +8,7 @@
 #include "common/protocol/response.h"
 
 #include "flashutil/exception.h"
-
-#include "serial.h"
-#include "serial/serial.h"
+#include "flashutil/spi/serial.h"
 
 #include "flashutil/debug.h"
 
@@ -52,12 +50,6 @@ struct SerialSpi::Impl {
 		this->serial.reset(new SerialProxy(serial));
 
 		this->init(true);
-	}
-
-	Impl(const std::string &path, int baudrate) {
-		this->serial.reset(new HwSerial(path, baudrate));
-
-		this->init(false);
 	}
 
 	void init(bool attached) {
@@ -179,6 +171,7 @@ struct SerialSpi::Impl {
 	) {
 		uint8_t *packetBuffer     = this->packetBuffer.data();
 		uint16_t packetBufferSize = this->packetBuffer.size();
+		uint16_t packetBufferWritten;
 
 		ProtoPkt packet;
 		ProtoRes response;
@@ -206,9 +199,11 @@ struct SerialSpi::Impl {
 			proto_req_encode(&request, packet.payload, packet.payloadSize);
 		}
 
-		HEX("Packet buffer", packetBuffer, packetBufferSize);
+		packetBufferWritten = proto_pkt_encode(&packet, packetBuffer, packetBufferSize);
 
-		this->serial->write(packetBuffer, proto_pkt_encode(&packet, packetBuffer, packetBufferSize), TIMEOUT_MS);
+		HEX("Packet buffer", packetBuffer, packetBufferWritten);
+
+		this->serial->write(packetBuffer, packetBufferWritten, TIMEOUT_MS);
 
 		{
 			ProtoPktDes decoder;
@@ -264,11 +259,6 @@ struct SerialSpi::Impl {
 		this->chipSelect(false);
 	}
 };
-
-
-SerialSpi::SerialSpi(const std::string &path, int baudrate) {
-	this->self.reset(new SerialSpi::Impl(path, baudrate));
-}
 
 
 SerialSpi::SerialSpi(Serial &serial) {

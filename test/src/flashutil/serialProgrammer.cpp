@@ -308,7 +308,7 @@ struct SerialProgrammer::Impl {
 	std::vector<uint8_t> outputBuffer;
 	DummyFlash           flash;
 
-	Impl(const Flash &flashInfo, size_t transferSize) : packetBuffer(16), flash(flashInfo) {
+	Impl(const Flash &flashInfo, size_t transferSize) : packetBuffer(transferSize), flash(flashInfo) {
 		this->capabilities.setTransferSizeMax(transferSize);
 
 		programmer_setup(
@@ -319,10 +319,6 @@ struct SerialProgrammer::Impl {
 			_programmerResponseCallback,
 			this
 		);
-	}
-
-	const Flash &getFlashInfo() {
-		return this->flash.getGeometry();
 	}
 
 	void write(void *buffer, std::size_t bufferSize, int timeoutMs) {
@@ -424,9 +420,4 @@ void SerialProgrammer::write(void *buffer, std::size_t bufferSize, int timeoutMs
 
 void SerialProgrammer::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 	this->_self->read(buffer, bufferSize, timeoutMs);
-}
-
-
-const Flash &SerialProgrammer::getFlashInfo() {
-	return this->_self->getFlashInfo();
 }

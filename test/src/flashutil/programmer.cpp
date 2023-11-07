@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "flashutil/spi/creator.h"
+#include "flashutil/spi/serial.h"
+#include "flashutil/serial/hw.h"
 #include "flashutil/programmer.h"
 #include "flashutil/entryPoint.h"
 #include "flashutil/debug.h"
@@ -18,12 +19,31 @@
 #define BLOCK_COUNT  (SECTOR_COUNT / SECTORS_PER_BLOCK)
 #define BLOCK_SIZE   (SECTOR_SIZE  * SECTORS_PER_BLOCK)
 
-#define PAYLOAD_SIZE 128
+#define PAYLOAD_SIZE 13
 
-static std::unique_ptr<Serial> createSerial(Flash &info, const char *serialPath) {
-	if (serialPath != nullptr) {
-//		return std::make_unique<Serial>()
-		return nullptr;
+
+static FlashRegistry &getFlashRegistry() {
+	static FlashRegistry registry;
+
+	return registry;
+}
+
+
+static std::unique_ptr<Serial> createSerial(Flash &info) {
+	const char *path = getenv("TEST_SERIAL_PATH");
+
+	if (path != nullptr) {
+		int baudInt = 115200;
+
+		{
+			const char *baud = getenv("TEST_SERIAL_BAUD");
+
+			if (baud != nullptr) {
+				baudInt = std::stoi(baud);
+			}
+		}
+
+		return std::make_unique<HwSerial>(path, baudInt);
 
 	} else {
 		info.setId({ 0x01, 0x02, 0x03 });
@@ -42,19 +62,42 @@ static std::unique_ptr<Serial> createSerial(Flash &info, const char *serialPath)
 }
 
 
-TEST(flashutil, programmer_connect) {
+TEST(flashutil_entry_point, detect_flash) {
 	Flash flashInfo;
 
-	auto serial = createSerial(flashInfo, getenv("TEST_SERIAL"));
+	std::unique_ptr<Serial> serial = createSerial(flashInfo);
+	std::unique_ptr<Spi>    spi    = std::make_unique<SerialSpi>(*serial.get());
 
-	std::unique_ptr<Spi> spi = SpiCreator().createSerialSpi(*serial.get());
+	{
+		flashutil::EntryPoint::Parameters params;
+
+		params.operation = flashutil::EntryPoint::Operation::NO_OPERATION;
+		params.mode      = flashutil::EntryPoint::Mode::CHIP;
+		params.flashInfo = &flashInfo;
+
+		ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), getFlashRegistry(), flashInfo, params), flashutil::EntryPoint::RC_SUCCESS);
+
+		ASSERT_NE(flashInfo.getSize(), 0);
+	}
+}
+
+
+TEST(flashutil_entry_point, write_erase_block) {
+	Flash flashInfo;
+
+	auto serial = createSerial(flashInfo);
+
+	std::unique_ptr<Spi> spi = std::make_unique<SerialSpi>(*serial.get());
+
 	FlashRegistry registry;
 
 	{
-		std::vector<flashutil::EntryPoint::Parameters> operations;
+		std::stringstream  block1Stream;
+		std::stringstream  block2Stream;
+		std::stringstream  block3Stream;
+		std::ostringstream blockReadStream;
 
-		std::istringstream inStream;
-		std::ostringstream outStream;
+		std::vector<flashutil::EntryPoint::Parameters> operations;
 
 		{
 			flashutil::EntryPoint::Parameters params;
@@ -63,17 +106,17 @@ TEST(flashutil, programmer_connect) {
 			params.mode      = flashutil::EntryPoint::Mode::CHIP;
 			params.flashInfo = &flashInfo;
 
-			ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), registry, flashInfo, params), flashutil::EntryPoint::RC_SUCCESS);
-		}
+			params.afterExecution = [&block1Stream, &block2Stream, &block3Stream](const flashutil::EntryPoint::Parameters &params) {
+				size_t size = params.flashInfo->getBlockSize();
 
-		{
-			std::string data;
+				for (int i = 0; i < size; i++) {
+					block1Stream << (char)(i + 1);
+					block2Stream << (char)(i + 2);
+					block3Stream << (char)(i + 3);
+				}
+			};
 
-			for (int i = 0; i < 32; i++) {
-				data.push_back(i);
-			}
-
-			inStream.str(data);
+			operations.push_back(params);
 		}
 
 		// unlock
@@ -94,10 +137,16 @@ TEST(flashutil, programmer_connect) {
 
 			params.operation           = flashutil::EntryPoint::Operation::ERASE;
 			params.mode                = flashutil::EntryPoint::Mode::BLOCK;
-			params.index               = 1;
 			params.omitRedundantWrites = true;
 			params.verify              = true;
 
+			params.index = 0;
+			operations.push_back(params);
+
+			params.index = 1;
+			operations.push_back(params);
+
+			params.index = 2;
 			operations.push_back(params);
 		}
 
@@ -106,13 +155,33 @@ TEST(flashutil, programmer_connect) {
 			flashutil::EntryPoint::Parameters params;
 
 			params.operation           = flashutil::EntryPoint::Operation::WRITE;
-			params.mode                = flashutil::EntryPoint::Mode::SECTOR;
-			params.index               = (flashInfo.getBlockSize() / flashInfo.getSectorSize()) + 1;
+			params.mode                = flashutil::EntryPoint::Mode::BLOCK;
 			params.omitRedundantWrites = true;
 			params.verify              = true;
 
-			params.inStream = &inStream;
+			params.index    = 0;
+			params.inStream = &block1Stream;
+			operations.push_back(params);
 
+			params.index    = 1;
+			params.inStream = &block2Stream;
+			operations.push_back(params);
+
+			params.index    = 2;
+			params.inStream = &block3Stream;
+			operations.push_back(params);
+		}
+
+		// Erase 1 in the middle
+		{
+			flashutil::EntryPoint::Parameters params;
+
+			params.operation           = flashutil::EntryPoint::Operation::ERASE;
+			params.mode                = flashutil::EntryPoint::Mode::BLOCK;
+			params.omitRedundantWrites = true;
+			params.verify              = true;
+
+			params.index = 1;
 			operations.push_back(params);
 		}
 
@@ -120,17 +189,44 @@ TEST(flashutil, programmer_connect) {
 		{
 			flashutil::EntryPoint::Parameters params;
 
-			params.operation           = flashutil::EntryPoint::Operation::READ;
-			params.mode                = flashutil::EntryPoint::Mode::SECTOR;
-			params.index               = (flashInfo.getBlockSize() / flashInfo.getSectorSize()) + 1;
+			params.operation = flashutil::EntryPoint::Operation::READ;
+			params.mode      = flashutil::EntryPoint::Mode::BLOCK;
+			params.outStream = &blockReadStream;
 
-			params.outStream = &outStream;
+			params.beforeExecution = [&blockReadStream](const flashutil::EntryPoint::Parameters &) {
+				blockReadStream.str("");
+			};
 
-			operations.push_back(params);
+			{
+				params.index          = 0;
+				params.afterExecution = [&block1Stream, &blockReadStream](const flashutil::EntryPoint::Parameters &params) {
+					ASSERT_EQ(block1Stream.str(), blockReadStream.str());
+				};
+
+				operations.push_back(params);
+			}
+
+			{
+				params.index          = 2;
+				params.afterExecution = [&block3Stream, &blockReadStream](const flashutil::EntryPoint::Parameters &params) {
+					ASSERT_EQ(block3Stream.str(), blockReadStream.str());
+				};
+
+				operations.push_back(params);
+			}
+
+			{
+				params.index          = 1;
+				params.afterExecution = [&blockReadStream](const flashutil::EntryPoint::Parameters &params) {
+					for (auto c : blockReadStream.str()) {
+						ASSERT_EQ(c, (char)0xff);
+					}
+				};
+
+				operations.push_back(params);
+			}
 		}
 
-		ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), registry, flashInfo, operations), flashutil::EntryPoint::RC_SUCCESS);
-
-		ASSERT_EQ(inStream.str(), outStream.str());
+		ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), getFlashRegistry(), flashInfo, operations), flashutil::EntryPoint::RC_SUCCESS);
 	}
 }

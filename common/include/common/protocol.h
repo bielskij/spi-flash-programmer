@@ -1,5 +1,5 @@
 /*
- * protocol.h
+ * common/protocol.h
  *
  *  Created on: 27 lut 2022
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)

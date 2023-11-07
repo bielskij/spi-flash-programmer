@@ -1,5 +1,5 @@
 /*
- * response.h
+ * common/protocol/packet.h
  *
  *  Created on: 23 lip 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)

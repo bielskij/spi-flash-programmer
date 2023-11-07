@@ -35,9 +35,8 @@ add_executable(unit_tests
 	../flashutil/src/flashutil/entryPoint.cpp
 	../flashutil/src/flashutil/programmer.cpp
 	../flashutil/src/flashutil/spi.cpp
-	../flashutil/src/flashutil/spi/creator.cpp
-	../flashutil/src/flashutil/spi/impl/serial.cpp
-	../flashutil/src/flashutil/spi/impl/serial/serial.cpp
+	../flashutil/src/flashutil/spi/serial.cpp
+	../flashutil/src/flashutil/serial/hw.cpp
 	
 	${TEST_FILES}
 )
