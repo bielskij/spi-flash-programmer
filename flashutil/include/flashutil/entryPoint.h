@@ -40,6 +40,7 @@ namespace flashutil {
 				bool omitRedundantWrites;
 				bool verify;
 
+				Flash        *flashInfo;
 				std::istream *inStream;
 				std::ostream *outStream;
 
@@ -51,6 +52,7 @@ namespace flashutil {
 					this->verify              = false;
 					this->inStream            = nullptr;
 					this->outStream           = nullptr;
+					this->flashInfo           = nullptr;
 				}
 
 				bool isValid() const;

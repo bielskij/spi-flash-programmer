@@ -3,6 +3,7 @@
 #include "flashutil/spi/creator.h"
 #include "flashutil/programmer.h"
 #include "flashutil/entryPoint.h"
+#include "flashutil/debug.h"
 
 #include "serialProgrammer.h"
 
@@ -19,26 +20,32 @@
 
 #define PAYLOAD_SIZE 128
 
-static std::unique_ptr<SerialProgrammer> createSerial() {
-	Flash flash;
+static std::unique_ptr<Serial> createSerial(Flash &info, const char *serialPath) {
+	if (serialPath != nullptr) {
+//		return std::make_unique<Serial>()
+		return nullptr;
 
-	flash.setId({ 0x01, 0x02, 0x03 });
+	} else {
+		info.setId({ 0x01, 0x02, 0x03 });
 
-	flash.setBlockSize  (BLOCK_SIZE);
-	flash.setBlockCount (BLOCK_COUNT);
-	flash.setSectorSize (SECTOR_SIZE);
-	flash.setSectorCount(SECTOR_COUNT);
-	flash.setPageSize   (PAGE_SIZE);
-	flash.setPageCount  (PAGE_COUNT);
+		info.setBlockSize  (BLOCK_SIZE);
+		info.setBlockCount (BLOCK_COUNT);
+		info.setSectorSize (SECTOR_SIZE);
+		info.setSectorCount(SECTOR_COUNT);
+		info.setPageSize   (PAGE_SIZE);
+		info.setPageCount  (PAGE_COUNT);
 
-	flash.setProtectMask(0x8c);
+		info.setProtectMask(0x8c);
 
-	return std::make_unique<SerialProgrammer>(flash, PAYLOAD_SIZE);
+		return std::make_unique<SerialProgrammer>(info, PAYLOAD_SIZE);
+	}
 }
 
 
 TEST(flashutil, programmer_connect) {
-	auto serial = createSerial();
+	Flash flashInfo;
+
+	auto serial = createSerial(flashInfo, getenv("TEST_SERIAL"));
 
 	std::unique_ptr<Spi> spi = SpiCreator().createSerialSpi(*serial.get());
 	FlashRegistry registry;
@@ -48,6 +55,16 @@ TEST(flashutil, programmer_connect) {
 
 		std::istringstream inStream;
 		std::ostringstream outStream;
+
+		{
+			flashutil::EntryPoint::Parameters params;
+
+			params.operation = flashutil::EntryPoint::Operation::NO_OPERATION;
+			params.mode      = flashutil::EntryPoint::Mode::CHIP;
+			params.flashInfo = &flashInfo;
+
+			ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), registry, flashInfo, params), flashutil::EntryPoint::RC_SUCCESS);
+		}
 
 		{
 			std::string data;
@@ -90,7 +107,7 @@ TEST(flashutil, programmer_connect) {
 
 			params.operation           = flashutil::EntryPoint::Operation::WRITE;
 			params.mode                = flashutil::EntryPoint::Mode::SECTOR;
-			params.index               = (serial->getFlashInfo().getBlockSize() / serial->getFlashInfo().getSectorSize()) + 1;
+			params.index               = (flashInfo.getBlockSize() / flashInfo.getSectorSize()) + 1;
 			params.omitRedundantWrites = true;
 			params.verify              = true;
 
@@ -105,14 +122,14 @@ TEST(flashutil, programmer_connect) {
 
 			params.operation           = flashutil::EntryPoint::Operation::READ;
 			params.mode                = flashutil::EntryPoint::Mode::SECTOR;
-			params.index               = (serial->getFlashInfo().getBlockSize() / serial->getFlashInfo().getSectorSize()) + 1;
+			params.index               = (flashInfo.getBlockSize() / flashInfo.getSectorSize()) + 1;
 
 			params.outStream = &outStream;
 
 			operations.push_back(params);
 		}
 
-		ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), registry, serial->getFlashInfo(), operations), flashutil::EntryPoint::RC_SUCCESS);
+		ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), registry, flashInfo, operations), flashutil::EntryPoint::RC_SUCCESS);
 
 		ASSERT_EQ(inStream.str(), outStream.str());
 	}

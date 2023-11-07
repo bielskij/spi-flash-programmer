@@ -200,7 +200,9 @@ int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flash
 					}
 
 				} else {
-					// TODO:
+					if (p.flashInfo != nullptr) {
+						*p.flashInfo = programmer.getFlashInfo();
+					}
 				}
 			}
 		}
