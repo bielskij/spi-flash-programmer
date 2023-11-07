@@ -126,7 +126,37 @@ static OperationHandlers _getHandlers() {
 
 		op = EntryPoint::Operation::READ;
 		{
+			ret[op][EntryPoint::Mode::SECTOR] =
+			ret[op][EntryPoint::Mode::BLOCK]  =
+			ret[op][EntryPoint::Mode::CHIP]   = [](Programmer &programmer, const EntryPoint::Parameters &params) {
+				uint32_t address = params.index;
+				size_t   read    = 0;
+				size_t   size;
 
+				const Flash &flashInfo = programmer.getFlashInfo();
+
+				switch (params.mode) {
+					case EntryPoint::Mode::CHIP:   size = flashInfo.getSize();       break;
+					case EntryPoint::Mode::BLOCK:  size = flashInfo.getBlockSize();  break;
+					case EntryPoint::Mode::SECTOR: size = flashInfo.getSectorSize(); break;
+
+					default:
+						break;
+				}
+
+				address *= size;
+
+				while (read != size) {
+					size_t toReadSize = std::min(flashInfo.getBlockSize(), size - read);
+
+					auto readBuffer = programmer.read(address, toReadSize);
+
+					params.outStream->write((char *) readBuffer.data(), readBuffer.size());
+
+					address += toReadSize;
+					read    += toReadSize;
+				}
+			};
 		}
 	}
 

@@ -92,13 +92,8 @@ std::size_t Spi::Message::RecvOpts::getBytes() const {
 }
 
 
-uint8_t *Spi::Message::RecvOpts::data() {
-	return this->_data.data();
-}
-
-
-uint8_t Spi::Message::RecvOpts::at(std::size_t pos) const {
-	return this->_data.at(pos);
+std::vector<uint8_t> &Spi::Message::RecvOpts::data() {
+	return this->_data;
 }
 
 

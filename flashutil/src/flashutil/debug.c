@@ -91,38 +91,42 @@ void debug_log(DebugLevel level, const char *fileName, int lineNo, const char *f
 
 
 void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength, uint32_t offset, uint32_t indent) {
-	uint32_t i, j;
+	if (bufferSize > 0) {
+		uint32_t i, j;
 
-	char asciiBuffer[lineLength + 1];
+		char asciiBuffer[lineLength + 1];
 
-	for (i = 0; i < bufferSize; i++) {
-		if ((i % lineLength) == 0) {
-			if (i != 0) {
-				printf("  %s\n", asciiBuffer);
+		for (i = 0; i < bufferSize; i++) {
+			if ((i % lineLength) == 0) {
+				if (i != 0) {
+					printf("  %s\n", asciiBuffer);
+				}
+
+				for (j = 0; j < indent; j++) {
+					printf(" ");
+				}
+
+				printf("%04x:  ", i + offset);
 			}
 
-			for (j = 0; j < indent; j++) {
-				printf(" ");
+			printf(" %02x", buffer[i]);
+
+			if (! isprint(buffer[i]) || buffer[i] == '\n' || buffer[i] == '\r') {
+				asciiBuffer[i % lineLength] = '.';
+			} else {
+				asciiBuffer[i % lineLength] = buffer[i];
 			}
 
-			printf("%04x:  ", i + offset);
+			asciiBuffer[(i % lineLength) + 1] = '\0';
 		}
 
-		printf(" %02x", buffer[i]);
-
-		if (! isprint(buffer[i]) || buffer[i] == '\n' || buffer[i] == '\r') {
-			asciiBuffer[i % lineLength] = '.';
-		} else {
-			asciiBuffer[i % lineLength] = buffer[i];
+		while ((i % 16) != 0) {
+			printf("   ");
+			i++;
 		}
 
-		asciiBuffer[(i % lineLength) + 1] = '\0';
+		printf("  %s", asciiBuffer);
 	}
 
-	while ((i % 16) != 0) {
-		printf("   ");
-		i++;
-	}
-
-	printf("  %s\n", asciiBuffer);
+	printf("\n");
 }

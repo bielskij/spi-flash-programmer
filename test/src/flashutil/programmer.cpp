@@ -47,11 +47,14 @@ TEST(flashutil, programmer_connect) {
 		std::vector<flashutil::EntryPoint::Parameters> operations;
 
 		std::istringstream inStream;
+		std::ostringstream outStream;
 
 		{
 			std::string data;
 
-			data.append(32, 0);
+			for (int i = 0; i < 32; i++) {
+				data.push_back(i);
+			}
 
 			inStream.str(data);
 		}
@@ -98,9 +101,19 @@ TEST(flashutil, programmer_connect) {
 
 		// Read
 		{
+			flashutil::EntryPoint::Parameters params;
 
+			params.operation           = flashutil::EntryPoint::Operation::READ;
+			params.mode                = flashutil::EntryPoint::Mode::SECTOR;
+			params.index               = (serial->getFlashInfo().getBlockSize() / serial->getFlashInfo().getSectorSize()) + 1;
+
+			params.outStream = &outStream;
+
+			operations.push_back(params);
 		}
 
-		flashutil::EntryPoint::call(*spi.get(), registry, serial->getFlashInfo(), operations);
+		ASSERT_EQ(flashutil::EntryPoint::call(*spi.get(), registry, serial->getFlashInfo(), operations), flashutil::EntryPoint::RC_SUCCESS);
+
+		ASSERT_EQ(inStream.str(), outStream.str());
 	}
 }

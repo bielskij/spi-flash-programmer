@@ -32,6 +32,7 @@ class Programmer {
 		void eraseSectorByNumber(int sectorNo);
 
 		void writePage(uint32_t address, const std::vector<uint8_t> &page);
+		std::vector<uint8_t> read(uint32_t address, size_t size);
 
 		const Flash &getFlashInfo() const;
 
@@ -43,7 +44,6 @@ class Programmer {
 		void verifyFlashInfoBlockNo(int blockNo);
 		void verifyFlashInfoSectorNo(int sectorNo);
 
-		bool checkErased(uint32_t address, size_t size);
 		FlashStatus waitForWIPClearance(int timeoutMs);
 
 		void cmdEraseChip();

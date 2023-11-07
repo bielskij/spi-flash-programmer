@@ -27,6 +27,10 @@ class Spi {
 							this->_chipDeselect = deselect;  return *this;
 						}
 
+						bool chipDeselect() const {
+							return this->_chipDeselect;
+						}
+
 						Flags &reset() {
 							this->chipDeselect(true); return *this;
 						}
@@ -59,8 +63,7 @@ class Spi {
 						std::size_t getBytes() const;
 						std::set<std::size_t> getSkipMap() const;
 
-						uint8_t *data();
-						uint8_t at(std::size_t pos) const;
+						std::vector<uint8_t> &data();
 
 						RecvOpts &reset();
 

@@ -6,6 +6,7 @@
  */
 #include <algorithm>
 #include <stdexcept>
+#include <cstring>
 
 #include "flashutil/programmer.h"
 #include "flashutil/exception.h"
@@ -137,53 +138,6 @@ void Programmer::verifyFlashInfoSectorNo(int sectorNo) {
 }
 
 
-bool Programmer::checkErased(uint32_t address, size_t size) {
-	bool ret = true;
-
-	_verifyCommon(this->_flashInfo);
-
-	{
-		size_t  pageSize = this->_flashInfo.getPageSize();
-		uint8_t pageBuffer[pageSize];
-
-		if (size < pageSize) {
-			size = pageSize;
-		}
-
-		this->cmdFlashReadBegin(address);
-
-		for (int page = 0; page * pageSize < size / pageSize; page++) {
-			Spi::Messages msgs;
-
-			{
-				auto &msg = msgs.add();
-
-				msg.recv()
-					.bytes(pageSize);
-
-				msg.flags()
-					.chipDeselect(false);
-			}
-
-			_spi.transfer(msgs);
-
-			{
-				auto *data = msgs.at(0).recv().data();
-
-				ret = std::all_of(pageBuffer, pageBuffer + pageSize, [](uint8_t byte) { return byte == 0xff; });
-				if (! ret) {
-					break;
-				}
-			}
-		}
-
-		_spi.chipSelect(false);
-	}
-
-	return ret;
-}
-
-
 FlashStatus Programmer::waitForWIPClearance(int timeoutMs) {
 	FlashStatus ret;
 
@@ -276,6 +230,28 @@ void Programmer::writePage(uint32_t address, const std::vector<uint8_t> &page) {
 }
 
 
+std::vector<uint8_t> Programmer::read(uint32_t address, size_t size) {
+	this->verifyFlashInfoAreaByAddress(address, size, 1);
+
+	this->cmdFlashReadBegin(address);
+
+	{
+		Spi::Messages msgs;
+
+		{
+			auto &msg = msgs.add();
+
+			msg.recv()
+				.bytes(size);
+		}
+
+		_spi.transfer(msgs);
+
+		return std::move(msgs.at(0).recv().data());
+	}
+}
+
+
 void Programmer::cmdEraseChip() {
 	Spi::Messages msgs;
 
@@ -355,9 +331,9 @@ void Programmer::cmdGetInfo(std::vector<uint8_t> &id) {
 	{
 		auto &recv = msgs.at(0).recv();
 
-		id.push_back(recv.at(0));
-		id.push_back(recv.at(1));
-		id.push_back(recv.at(2));
+		id.push_back(recv.data().at(0));
+		id.push_back(recv.data().at(1));
+		id.push_back(recv.data().at(2));
 	}
 }
 
@@ -380,7 +356,7 @@ void Programmer::cmdGetStatus(FlashStatus &status) {
 
 	_spi.transfer(msgs);
 
-	status = FlashStatus(msgs.at(0).recv().at(0));
+	status = FlashStatus(msgs.at(0).recv().data().at(0));
 }
 
 

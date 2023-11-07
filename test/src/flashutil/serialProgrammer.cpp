@@ -49,6 +49,7 @@ class DummyFlash {
 		static constexpr uint8_t CMD_WREN = 0x06;
 		static constexpr uint8_t CMD_WRSR = 0x01;
 		static constexpr uint8_t CMD_PP   = 0x02;
+		static constexpr uint8_t CMD_RD   = 0x03;
 
 	public:
 		DummyFlash(const Flash &geometry) : geometry(geometry), memory(geometry.getSize(), ERASED_BYTE) {
@@ -78,6 +79,20 @@ class DummyFlash {
 				case CMD_RDSR:
 					{
 						ret = this->statusReg;
+					}
+					break;
+
+				case CMD_RD:
+					{
+						if (! this->cmdData.empty()) {
+							this->address = (this->cmdData[0] << 16) | (this->cmdData[1] << 8) | (this->cmdData[2]);
+
+							this->cmdData.clear();
+						}
+
+						ret = this->memory[this->address];
+
+						this->address = (this->address + 1) % this->memory.size();
 					}
 					break;
 
@@ -250,6 +265,7 @@ class DummyFlash {
 			ret.emplace(CMD_WREN, CmdDescription(CMD_WREN,     0, false, ParseState::IGNORE));
 			ret.emplace(CMD_WRSR, CmdDescription(CMD_WRSR,     1, false, ParseState::IGNORE));
 			ret.emplace(CMD_PP,   CmdDescription(CMD_PP,      19, false, ParseState::HANDLE_CMD));
+			ret.emplace(CMD_RD,   CmdDescription(CMD_RD,       3, true,  ParseState::HANDLE_CMD));
 
 			return ret;
 		}
@@ -277,6 +293,7 @@ constexpr uint8_t DummyFlash::CMD_RDSR;
 constexpr uint8_t DummyFlash::CMD_WREN;
 constexpr uint8_t DummyFlash::CMD_WRSR;
 constexpr uint8_t DummyFlash::CMD_PP;
+constexpr uint8_t DummyFlash::CMD_RD;
 
 const uint8_t DummyFlash::ERASED_BYTE = 0xff;
 const uint8_t DummyFlash::INVALID_CMD = 0xff;
@@ -344,6 +361,7 @@ struct SerialProgrammer::Impl {
 
 					self->flash.cs(true);
 
+					DEBUG("Request flags: %02x, tx: %u, rx: %u, skip: %u", req.flags, req.txBufferSize, req.rxBufferSize, req.rxSkipSize)
 					HEX("Request data", req.txBuffer, req.txBufferSize);
 
 					for (uint16_t i = 0; i < std::max(req.txBufferSize, (uint16_t)(req.rxSkipSize + req.rxBufferSize)); i++) {

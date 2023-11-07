@@ -81,7 +81,7 @@ struct SerialSpi::Impl {
 				executeCmd(
 					PROTO_CMD_SPI_TRANSFER,
 
-					[&rxSize, &txSize, &rxSkip](ProtoReq &request, ProtoRes &response) {
+					[&rxSize, &txSize, &rxSkip, &msg](ProtoReq &request, ProtoRes &response) {
 						ProtoReqTransfer &t = request.request.transfer;
 
 						t.txBufferSize = std::min((size_t) t.txBufferSize, txSize);
@@ -108,6 +108,11 @@ struct SerialSpi::Impl {
 							}
 						}
 
+						// Apply flags
+						if (! msg.flags().chipDeselect()) {
+							t.flags |= PROTO_SPI_TRANSFER_FLAG_KEEP_CS;
+						}
+
 						if (rxSize > 0 || txSize > 0 || rxSkip > 0) {
 							t.flags |= PROTO_SPI_TRANSFER_FLAG_KEEP_CS;
 						}
@@ -124,7 +129,7 @@ struct SerialSpi::Impl {
 					[&rxWritten, &msg](const ProtoRes &response) {
 						const ProtoResTransfer &t = response.response.transfer;
 
-						memcpy(msg.recv().data() + rxWritten, t.rxBuffer, t.rxBufferSize);
+						std::copy(t.rxBuffer, t.rxBuffer + t.rxBufferSize, msg.recv().data().begin() + rxWritten);
 
 						rxWritten += t.rxBufferSize;
 					},
