@@ -73,7 +73,7 @@ bool proto_pkt_prepare(ProtoPkt *pkt, void *mem, uint16_t memSize, uint16_t payl
 uint16_t proto_pkt_encode(ProtoPkt *pkt, void *mem, uint16_t memSize) {
 	uint16_t ret = 0;
 
-	do {
+	{
 		uint8_t *buff = (uint8_t *) mem;
 
 		buff[ret++] = PROTO_SYNC_NIBBLE | pkt->code;
@@ -82,10 +82,10 @@ uint16_t proto_pkt_encode(ProtoPkt *pkt, void *mem, uint16_t memSize) {
 		ret += proto_int_val_encode(pkt->payloadSize, buff + ret);
 		ret += pkt->payloadSize;
 
-		buff[ret++] = crc8_get(buff, ret, PROTO_CRC8_POLY, PROTO_CRC8_START);
-	} while (0);
+		buff[ret] = crc8_get(buff, ret, PROTO_CRC8_POLY, PROTO_CRC8_START);
+	};
 
-	return ret;
+	return ret + 1;
 }
 
 
