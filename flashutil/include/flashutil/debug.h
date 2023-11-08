@@ -27,6 +27,8 @@ typedef enum _DebugLevel {
 #define DEBUG(...) { debug_log(DEBUG_LEVEL_DEBUG,   __FILE__, __LINE__, __func__, __VA_ARGS__); }
 #define TRACE(...) { debug_log(DEBUG_LEVEL_TRACE,   __FILE__, __LINE__, __func__, __VA_ARGS__); }
 
+#define OUT(...) { debug_out(__VA_ARGS__); }
+
 #define HEX(title, buffer, bufferSize) do { \
 	TRACE("Dumping memory at %p of size %zd bytes (%s)", buffer, bufferSize, title); \
 	debug_dumpBuffer(buffer, bufferSize, 16, 0, 6); \
@@ -37,6 +39,7 @@ void debug_initialize();
 void debug_setLevel(DebugLevel level);
 
 void debug_log(DebugLevel level, const char *fileName, int lineNo, const char *functionName, const char *fmt, ...);
+void debug_out(const char *fmt, ...);
 
 void debug_dumpBuffer(uint8_t *buffer, uint32_t bufferSize, uint32_t lineLength, uint32_t offset, uint32_t indent);
 

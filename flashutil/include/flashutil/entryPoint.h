@@ -10,10 +10,6 @@
 namespace flashutil {
 	class EntryPoint {
 		public:
-			static const int RC_SUCCESS;
-			static const int RC_FAILURE;
-
-		public:
 			enum class Mode {
 				NONE,
 
@@ -62,8 +58,8 @@ namespace flashutil {
 			};
 
 		public:
-			static int call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const std::vector<Parameters> &parameters);
-			static int call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const Parameters &parameters);
+			static void call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const std::vector<Parameters> &parameters);
+			static void call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const Parameters &parameters);
 
 		private:
 			EntryPoint();

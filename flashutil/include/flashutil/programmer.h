@@ -59,6 +59,7 @@ class Programmer {
 	private:
 		Flash                _flashInfo;
 		const FlashRegistry *_flashRegistry;
+		bool                 _spiAttached;
 
 		Spi &_spi;
 };

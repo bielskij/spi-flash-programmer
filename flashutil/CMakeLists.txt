@@ -10,37 +10,42 @@ if(NOT TARGET spdlog)
 	find_package(spdlog REQUIRED)
 endif()
 
-set(SRC_FILES 
-	../common/src/common/crc8.c 
-	../common/src/common/protocol/common.c
-	../common/src/common/protocol/packet.c
-	../common/src/common/protocol/request.c
-	../common/src/common/protocol/response.c
+set(src_path     "${CMAKE_CURRENT_LIST_DIR}/src/flashutil")
+set(headers_path "${CMAKE_CURRENT_LIST_DIR}/include/")
 
-	src/flashutil/spi.cpp
-	src/flashutil/spi/creator.cpp
-	src/flashutil/spi/impl/serial.cpp
-	src/flashutil/spi/impl/serial/serial.cpp
+add_library(flashutil SHARED
+	${src_path}/spi.cpp
+	${src_path}/spi/serial.cpp
+
+	${src_path}/serial/hw.cpp
+
+	${src_path}/debug.c
+	${src_path}/entryPoint.cpp
+	${src_path}/flash.cpp
+	${src_path}/programmer.cpp
+	${src_path}/spi.cpp
 	
-	src/flashutil/flash.cpp
-	src/flashutil/flash/builder.cpp
-	src/flashutil/flash/registry.cpp
-	
-	src/flashutil/programmer.cpp
-	src/flashutil/debug.c
-	src/flashutil/entryPoint.cpp
-	src/flashutil/main.cpp
+	${src_path}/flash/builder.cpp
+	${src_path}/flash/registry.cpp
+	${src_path}/flash/status.cpp
 )
 
-add_executable(flash-util
-	${SRC_FILES}
+target_include_directories(flashutil PUBLIC
+	${headers_path}
 )
 
-target_include_directories(flash-util PRIVATE
+target_link_libraries(flashutil PUBLIC
+	protocol
+)
+
+add_executable(flash-util-app
+	${src_path}/main.cpp
+)
+
+target_include_directories(flash-util-app PRIVATE
 	include
-	../common/include
 )
 
-target_link_libraries(flash-util PUBLIC
-	Boost::thread Boost::program_options Boost::chrono
+target_link_libraries(flash-util-app PUBLIC
+	flashutil Boost::thread Boost::program_options Boost::chrono
 )

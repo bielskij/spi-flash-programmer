@@ -18,6 +18,21 @@ void debug_setLevel(DebugLevel level) {
 }
 
 
+void debug_out(const char *fmt, ...) {
+	{
+		va_list ap;
+
+		va_start(ap, fmt);
+		{
+			vfprintf(stderr, fmt, ap);
+		}
+		va_end(ap);
+	}
+
+	fprintf(stderr, "\n");
+}
+
+
 void debug_log(DebugLevel level, const char *fileName, int lineNo, const char *functionName, const char *fmt, ...) {
 	char *levelString = "-----";
 	char *levelColor  = NULL;

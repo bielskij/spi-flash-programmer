@@ -10,9 +10,6 @@
 using namespace flashutil;
 
 
-const int EntryPoint::RC_SUCCESS = 0;
-const int EntryPoint::RC_FAILURE = 1;
-
 using OperationHandler  = std::function<void(Programmer &programmer, const EntryPoint::Parameters &params)>;
 using OperationHandlers = std::map<EntryPoint::Operation, std::map<EntryPoint::Mode, OperationHandler>>;
 
@@ -101,12 +98,12 @@ static OperationHandlers _getHandlers() {
 						break;
 				}
 
-				INFO("Writing data at %08x", address);
-
 				{
 					std::vector<uint8_t> page(flashInfo.getPageSize(), 0xff);
 
 					while (! params.inStream->eof()) {
+						uint32_t pageIdx = address / flashInfo.getPageSize();
+
 						params.inStream->read((char *) page.data(), page.size());
 
 						size_t readSize = params.inStream->gcount();
@@ -117,6 +114,13 @@ static OperationHandlers _getHandlers() {
 						if (readSize != page.size()) {
 							memset(page.data() + readSize, 0xff, page.size() - readSize);
 						}
+
+						INFO("Writing page %u, in sector: %zd, in block %zd (addr %#08x).",
+							pageIdx,
+							(pageIdx * flashInfo.getPageSize()) / flashInfo.getSectorSize(),
+							(pageIdx * flashInfo.getPageSize()) / flashInfo.getBlockSize(),
+							address
+						);
 
 						programmer.writePage(address, page);
 
@@ -183,54 +187,42 @@ static OperationHandler _getHandler(const EntryPoint::Parameters &params) {
 }
 
 
-int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const Parameters &parameters) {
-	return call(spi, registry, flashGeometry, std::vector<Parameters>({ parameters }));
+void EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const Parameters &parameters) {
+	call(spi, registry, flashGeometry, std::vector<Parameters>({ parameters }));
 }
 
 
-int EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const std::vector<Parameters> &parameters) {
-	int ret = RC_SUCCESS;
+void EntryPoint::call(Spi &spi, const FlashRegistry &registry, const Flash &flashGeometry, const std::vector<Parameters> &parameters) {
+	Programmer programmer(spi, &registry);
 
-	try {
-		Programmer programmer(spi, &registry);
+	programmer.begin(flashGeometry.isGeometryValid() ? &flashGeometry : nullptr);
+	{
+		for (const auto &p : parameters) {
+			if (p.beforeExecution) {
+				p.beforeExecution(p);
+			}
 
-		programmer.begin(flashGeometry.isGeometryValid() ? &flashGeometry : nullptr);
-		{
-			for (const auto &p : parameters) {
-				if (p.beforeExecution) {
-					p.beforeExecution(p);
+			if (p.mode != Mode::NONE && p.operation != Operation::NO_OPERATION) {
+				auto handler = _getHandler(p);
+				if (handler) {
+					handler(programmer, p);
 				}
 
-				if (p.mode != Mode::NONE && p.operation != Operation::NO_OPERATION) {
-					auto handler = _getHandler(p);
-					if (handler) {
-						handler(programmer, p);
-					}
-
-				} else {
-					if (p.flashInfo != nullptr) {
-						*p.flashInfo = programmer.getFlashInfo();
-					}
-				}
-
-				if (p.afterExecution) {
-					p.afterExecution(p);
+			} else {
+				if (p.flashInfo != nullptr) {
+					*p.flashInfo = programmer.getFlashInfo();
 				}
 			}
+
+			if (p.afterExecution) {
+				p.afterExecution(p);
+			}
 		}
-		programmer.end();
-
-	} catch (const std::exception &ex) {
-		ERROR("Got exception: %s", ex.what());
-
-		ret = RC_FAILURE;
 	}
-
-	return ret;
+	programmer.end();
 }
 
 
 bool EntryPoint::Parameters::isValid() const {
-	ERROR("TODO: Implement!");
 	return true;
 }

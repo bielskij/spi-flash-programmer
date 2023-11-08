@@ -23,6 +23,7 @@
 
 Programmer::Programmer(Spi &spiDev, const FlashRegistry *registry) : _spi(spiDev) {
 	this->_flashRegistry = registry;
+	this->_spiAttached   = false;
 }
 
 
@@ -37,6 +38,7 @@ void Programmer::begin(const Flash *defaultGeometry) {
 	TRACE("call, geometry: %p", defaultGeometry);
 
 	this->_spi.attach();
+	this->_spiAttached = true;
 
 	{
 		std::vector<uint8_t> id;
@@ -57,14 +59,7 @@ void Programmer::begin(const Flash *defaultGeometry) {
 				} catch (const std::exception &) {}
 			}
 
-			if (f.isGeometryValid()) {
-				INFO("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdB",
-					f.getName().c_str(), f.getId()[0], f.getId()[1], f.getId()[2],
-					f.getSize(), f.getBlockCount(), f.getBlockSize() / 1024,
-					f.getSectorCount(), f.getSectorSize()
-				);
-
-			} else {
+			if (! f.isGeometryValid()) {
 				INFO("Detected flash chip of ID %02x, %02x, %02x - its geometry is unknown", id[0], id[1], id[2]);
 			}
 
@@ -78,7 +73,10 @@ void Programmer::begin(const Flash *defaultGeometry) {
 void Programmer::end() {
 	TRACE(("call"));
 
-	this->_spi.detach();
+	if (this->_spiAttached) {
+		this->_spiAttached = false;
+		this->_spi.detach();
+	}
 
 	this->_flashInfo = Flash();
 }
