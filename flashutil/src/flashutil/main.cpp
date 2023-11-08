@@ -143,7 +143,8 @@ int main(int argc, char *argv[]) {
 				std::ofstream outFile;
 
 				opDesc.add_options()
-					(OPT_VERBOSE     ",v",                           "Verbose output")
+					(OPT_VERBOSE     ",v", po::value<int>()->default_value(DEBUG_LEVEL_INFO), "Verbose output (0 - 5)")
+
 					(OPT_HELP        ",h",                           "Print usage message")
 					(OPT_SERIAL      ",s", po::value<std::string>(), "Serial port path")
 					(OPT_OUTPUT      ",o", po::value<std::string>(), "Output file path or '-' for stdout")
@@ -178,6 +179,26 @@ int main(int argc, char *argv[]) {
 
 				} else {
 					serialPath = vm[OPT_SERIAL].as<std::string>();
+				}
+
+				{
+					DebugLevel level = DEBUG_LEVEL_NONE;
+
+					if (vm.count(OPT_VERBOSE)) {
+						int intLevel = vm[OPT_VERBOSE].as<int>();
+
+						if (intLevel > DEBUG_LEVEL_LAST) {
+							level = DEBUG_LEVEL_LAST;
+
+						} else if (intLevel < 0) {
+							level = DEBUG_LEVEL_NONE;
+
+						} else {
+							level = (DebugLevel) intLevel;
+						}
+					}
+
+					debug_setLevel(level);
 				}
 
 				if (vm.count(OPT_BAUD)) {

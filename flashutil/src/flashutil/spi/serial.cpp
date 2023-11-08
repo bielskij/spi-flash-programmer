@@ -201,7 +201,7 @@ struct SerialSpi::Impl {
 
 		packetBufferWritten = proto_pkt_encode(&packet, packetBuffer, packetBufferSize);
 
-		HEX("Packet buffer", packetBuffer, packetBufferWritten);
+		HEX(DEBUG_LEVEL_TRACE, "Packet buffer", packetBuffer, packetBufferWritten);
 
 		this->serial->write(packetBuffer, packetBufferWritten, TIMEOUT_MS);
 
