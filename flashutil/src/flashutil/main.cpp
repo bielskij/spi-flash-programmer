@@ -145,24 +145,24 @@ int main(int argc, char *argv[]) {
 				opDesc.add_options()
 					(OPT_VERBOSE     ",v", po::value<int>()->default_value(DEBUG_LEVEL_INFO), "Verbose output (0 - 5)")
 
-					(OPT_HELP        ",h",                           "Print usage message")
-					(OPT_SERIAL      ",s", po::value<std::string>(), "Serial port path")
-					(OPT_OUTPUT      ",o", po::value<std::string>(), "Output file path or '-' for stdout")
-					(OPT_INPUT       ",i", po::value<std::string>(), "Input file path or '-' for stdin")
-					(OPT_READ        ",r",                           "Read to output file")
-					(OPT_WRITE       ",w",                           "Write input file")
-					(OPT_ERASE       ",e",                           "Erase whole chip")
-					(OPT_VERIFY      ",V",                           "Verify writing process")
-					(OPT_UNPROTECT   ",u",                           "Unprotect the chip before doing any operation on it")
-					(OPT_FLASH_DESC  ",g",                           "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
-					(OPT_BAUD,             po::value<int>(),         "Serial port baudrate")
-					(OPT_READ_BLOCK,       po::value<off_t>(),       "Read block at index")
-					(OPT_READ_SECTOR,      po::value<off_t>(),       "Read Sector at index")
-					(OPT_ERASE_BLOCK,      po::value<off_t>(),       "Erase block at index")
-					(OPT_ERASE_SECTOR,     po::value<off_t>(),       "Erase sector at index")
-					(OPT_WRITE_BLOCK,      po::value<off_t>(),       "Write block from input file")
-					(OPT_WRITE_SECTOR,     po::value<off_t>(),       "Write sector from input file")
-					(OPT_OMIT_REDUNDANT_OPS,                         "Prevent from redundant erase/write cycles");
+					(OPT_HELP        ",h",                                               "Print usage message")
+					(OPT_SERIAL      ",s", po::value<std::string>(),                     "Serial port path")
+					(OPT_OUTPUT      ",o", po::value<std::string>()->default_value("-"), "Output file path or '-' for stdout")
+					(OPT_INPUT       ",i", po::value<std::string>()->default_value("-"), "Input file path or '-' for stdin")
+					(OPT_READ        ",r",                                               "Read to output file")
+					(OPT_WRITE       ",w",                                               "Write input file")
+					(OPT_ERASE       ",e",                                               "Erase whole chip")
+					(OPT_VERIFY      ",V",                                               "Verify writing process")
+					(OPT_UNPROTECT   ",u",                                               "Unprotect the chip before doing any operation on it")
+					(OPT_FLASH_DESC  ",g",                                               "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+					(OPT_BAUD,             po::value<int>(),                             "Serial port baudrate")
+					(OPT_READ_BLOCK,       po::value<off_t>(),                           "Read block at index")
+					(OPT_READ_SECTOR,      po::value<off_t>(),                           "Read Sector at index")
+					(OPT_ERASE_BLOCK,      po::value<off_t>(),                           "Erase block at index")
+					(OPT_ERASE_SECTOR,     po::value<off_t>(),                           "Erase sector at index")
+					(OPT_WRITE_BLOCK,      po::value<off_t>(),                           "Write block from input file")
+					(OPT_WRITE_SECTOR,     po::value<off_t>(),                           "Write sector from input file")
+					(OPT_OMIT_REDUNDANT_OPS,                                             "Prevent from redundant erase/write cycles");
 					;
 
 				po::variables_map vm;
@@ -304,6 +304,8 @@ int main(int argc, char *argv[]) {
 					};
 
 					operations.push_back(params);
+
+					params.afterExecution = {};
 				}
 
 				// Unlock

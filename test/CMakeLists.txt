@@ -16,46 +16,25 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-file(GLOB_RECURSE TEST_FILES src/*.cpp) 
+set(src_path "${CMAKE_CURRENT_LIST_DIR}/src")
+
+file(GLOB_RECURSE TEST_FILES ${src_path}/*.cpp) 
 
 add_executable(unit_tests
-	../common/src/common/crc8.c
-	
-	../common/src/common/protocol/common.c
-	../common/src/common/protocol/packet.c
-	../common/src/common/protocol/request.c
-	../common/src/common/protocol/response.c
-	
-	../firmware/common/src/firmware/programmer.c
-	
-	../flashutil/src/flashutil/debug.c
-	../flashutil/src/flashutil/flash.cpp
-	../flashutil/src/flashutil/flash/registry.cpp
-	../flashutil/src/flashutil/flash/status.cpp
-	../flashutil/src/flashutil/entryPoint.cpp
-	../flashutil/src/flashutil/programmer.cpp
-	../flashutil/src/flashutil/spi.cpp
-	../flashutil/src/flashutil/spi/serial.cpp
-	../flashutil/src/flashutil/serial/hw.cpp
-	
 	${TEST_FILES}
 )
 
-message(${TEST_FILES})
-
-# 
-
 target_include_directories(unit_tests 
 	PRIVATE
-		include
-		../common/include
-		../firmware/common/include
-		../flashutil/include
+		${CMAKE_CURRENT_LIST_DIR}/include
 )
 
 target_link_libraries(unit_tests
 	PRIVATE
 		GTest::gtest_main
+		firmware-common
+		protocol
+		flashutil
 )
 
 include(GoogleTest)

@@ -117,7 +117,7 @@ class DummyFlash {
 
 					this->memory = this->memoryPending;
 
-					HEX("Committed flash memory", this->memory.data(), this->memory.size());
+					HEX(DEBUG_LEVEL_TRACE, "Committed flash memory", this->memory.data(), this->memory.size());
 				}
 			}
 
@@ -358,7 +358,7 @@ struct SerialProgrammer::Impl {
 					self->flash.cs(true);
 
 					DEBUG("Request flags: %02x, tx: %u, rx: %u, skip: %u", req.flags, req.txBufferSize, req.rxBufferSize, req.rxSkipSize)
-					HEX("Request data", req.txBuffer, req.txBufferSize);
+					HEX(DEBUG_LEVEL_DEBUG, "Request data", req.txBuffer, req.txBufferSize);
 
 					for (uint16_t i = 0; i < std::max(req.txBufferSize, (uint16_t)(req.rxSkipSize + req.rxBufferSize)); i++) {
 						uint8_t received;
@@ -380,7 +380,7 @@ struct SerialProgrammer::Impl {
 					}
 
 					if (res.rxBufferSize > 0) {
-						HEX("Response data", res.rxBuffer, res.rxBufferSize);
+						HEX(DEBUG_LEVEL_DEBUG, "Response data", res.rxBuffer, res.rxBufferSize);
 					}
 
 					if ((req.flags & PROTO_SPI_TRANSFER_FLAG_KEEP_CS) == 0) {

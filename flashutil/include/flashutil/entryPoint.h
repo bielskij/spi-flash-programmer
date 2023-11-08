@@ -44,7 +44,7 @@ namespace flashutil {
 				std::function<void(const Parameters &)> afterExecution;
 
 				Parameters() {
-					this->index               = -1;
+					this->index               = 0;
 					this->mode                = Mode::NONE;
 					this->operation           = Operation::NO_OPERATION;
 					this->omitRedundantWrites = false;
