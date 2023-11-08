@@ -28,18 +28,20 @@ set(srcs
 	${src_path}/crc8.c
 )
 
-add_library(protocol ${headers} ${srcs})
+add_library(protocol 
+	${headers} ${srcs}
+)
 
 target_include_directories(protocol
 	PUBLIC
 		${headers_path}
 )
 
-install(TARGETS protocol
-	ARCHIVE DESTINATION lib
-	LIBRARY DESTINATION lib
-	RUNTIME DESTINATION bin
-)
+#install(TARGETS protocol
+#	ARCHIVE DESTINATION lib
+#	LIBRARY DESTINATION lib
+#	RUNTIME DESTINATION bin
+#)
 
 
 #set(include_dest "include/my_library-${MY_LIBRARY_VERSION}")
