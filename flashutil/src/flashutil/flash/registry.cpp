@@ -16,6 +16,11 @@ FlashRegistry::FlashRegistry() {
 }
 
 
+void FlashRegistry::clear() {
+	this->_flashes.clear();
+}
+
+
 void FlashRegistry::addFlash(const Flash &flash) {
 	this->_flashes.push_back(flash);
 }
@@ -29,4 +34,9 @@ const Flash &FlashRegistry::getById(const std::vector<uint8_t> &id) const {
 	}
 
 	throw std::runtime_error("Flash info was not found in local repository!");
+}
+
+
+const std::vector<Flash> &FlashRegistry::getAll() const {
+	return this->_flashes;
 }

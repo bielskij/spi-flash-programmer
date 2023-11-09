@@ -17,8 +17,11 @@ class Flash {
 		Flash();
 		Flash(const std::string &name, const std::vector<uint8_t> &jedecId, size_t blockSize, size_t nblocks, size_t sectorSize, size_t nSectors, uint8_t protectMask);
 
-		const std::string &getName() const;
-		void setName(const std::string &name);
+		const std::string &getPartNumber() const;
+		void setPartNumber(const std::string &partNumber);
+
+		const std::string &getManufacturer() const;
+		void setManufacturer(const std::string &manufacturer);
 
 		const std::vector<uint8_t> &getId() const;
 		void setId(const std::vector<uint8_t> &id);
@@ -45,6 +48,7 @@ class Flash {
 		void    setProtectMask(uint8_t mask);
 
 		size_t getSize() const;
+		void   setSize(size_t size);
 
 		void setGeometry(const Flash &other);
 
@@ -53,7 +57,8 @@ class Flash {
 		bool isValid() const;
 
 	private:
-		std::string          name;
+		std::string          partNumber;
+		std::string          manufacturer;
 		std::vector<uint8_t> id;
 		size_t               blockSize;
 		size_t               blockCount;

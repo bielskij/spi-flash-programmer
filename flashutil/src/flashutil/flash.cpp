@@ -20,7 +20,7 @@ Flash::Flash() {
 
 
 Flash::Flash(const std::string &name, const std::vector<uint8_t> &jedecId, size_t blockSize, size_t nblocks, size_t sectorSize, size_t nSectors, uint8_t protectMask) {
-	this->setName(name);
+	this->setPartNumber(name);
 	this->setId(jedecId);
 	this->setBlockSize(blockSize);
 	this->setBlockCount(nblocks);
@@ -33,13 +33,23 @@ Flash::Flash(const std::string &name, const std::vector<uint8_t> &jedecId, size_
 }
 
 
-const std::string &Flash::getName() const {
-	return this->name;
+const std::string &Flash::getPartNumber() const {
+	return this->partNumber;
 }
 
 
-void Flash::setName(const std::string &name) {
-	this->name = name;
+void Flash::setPartNumber(const std::string &partNumber) {
+	this->partNumber = partNumber;
+}
+
+
+const std::string &Flash::getManufacturer() const {
+	return this->manufacturer;
+}
+
+
+void Flash::setManufacturer(const std::string &manufacturer) {
+	this->manufacturer = manufacturer;
 }
 
 
@@ -132,6 +142,21 @@ size_t Flash::getSize() const {
 	}
 
 	return 0;
+}
+
+
+void Flash::setSize(size_t size) {
+	if (this->blockSize > 0) {
+		this->blockCount = size / this->blockSize;
+	}
+
+	if (this->sectorSize > 0) {
+		this->sectorCount = size / this->sectorSize;
+	}
+
+	if (this->pageSize > 0) {
+		this->pageCount = size / this->pageSize;
+	}
 }
 
 

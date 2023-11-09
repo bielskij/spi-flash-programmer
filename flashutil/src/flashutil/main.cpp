@@ -11,21 +11,23 @@
 
 #include "flashutil/entryPoint.h"
 #include "flashutil/flash/builder.h"
-#include "flashutil/flash/registry.h"
 #include "flashutil/spi/serial.h"
 #include "flashutil/serial/hw.h"
+#include "flashutil/flash/registry.h"
+#include "flashutil/flash/registry/reader/json.h"
 
 #include "flashutil/debug.h"
 
 
 namespace po = boost::program_options;
 
-#define OPT_VERBOSE "verbose"
-#define OPT_HELP    "help"
-#define OPT_SERIAL  "serial"
-#define OPT_OUTPUT  "output"
-#define OPT_INPUT   "input"
-#define OPT_BAUD    "serial-baud"
+#define OPT_VERBOSE  "verbose"
+#define OPT_HELP     "help"
+#define OPT_SERIAL   "serial"
+#define OPT_OUTPUT   "output"
+#define OPT_INPUT    "input"
+#define OPT_BAUD     "serial-baud"
+#define OPT_REGISTRY "registry"
 
 #define OPT_READ         "read"
 #define OPT_READ_BLOCK   "read-block"
@@ -55,72 +57,6 @@ static void _usage(const po::options_description &opts) {
 }
 
 
-static const FlashRegistry &_getRegistry() {
-	static FlashRegistry registry = []() {
-		FlashRegistry reg;
-
-#define KiB(_x)(1024 * _x)
-#define Mib(_x)((1024 * 1024 * (_x)) / 8)
-
-		{
-			FlashBuilder builder;
-
-			reg.addFlash(builder
-				.reset()
-				.setName("Macronix MX25L2026E/MX25l2005A")
-				.setJedecId    ({ 0xc2, 0x20, 0x12 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(2))
-				.setProtectMask(0x8c)
-				.build()
-			);
-
-			reg.addFlash(builder
-				.reset()
-				.setName("Macronix MX25V16066")
-				.setJedecId    ({ 0xc2, 0x20, 0x15 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(16))
-				.setProtectMask(0xbc)
-				.build()
-			);
-
-			reg.addFlash(builder
-				.reset()
-				.setName("Winbond W25Q32")
-				.setJedecId    ({ 0xef, 0x40, 0x16 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(32))
-				.setProtectMask(0xfc)
-				.build()
-			);
-
-			reg.addFlash(builder
-				.reset()
-				.setName("GigaDevice W25Q80")
-				.setJedecId    ({ 0xc8, 0x40, 0x14 })
-				.setBlockSize  (KiB(64))
-				.setSectorSize (KiB(4))
-				.setPageSize   (256)
-				.setSize       (Mib(8))
-				.setProtectMask(0x7c)
-				.build()
-			);
-		}
-
-		return reg;
-	}();
-
-	return registry;
-}
-
-
 int main(int argc, char *argv[]) {
 	int ret = RC_FAILURE;
 
@@ -129,7 +65,7 @@ int main(int argc, char *argv[]) {
 		std::unique_ptr<Serial> serial;
 
 		try {
-			FlashRegistry                     flashRegistry = _getRegistry();
+			FlashRegistry                     flashRegistry;
 			Flash                             flashGeometry;
 			flashutil::EntryPoint::Parameters params;
 
@@ -154,7 +90,8 @@ int main(int argc, char *argv[]) {
 					(OPT_ERASE       ",e",                                               "Erase whole chip")
 					(OPT_VERIFY      ",V",                                               "Verify writing process")
 					(OPT_UNPROTECT   ",u",                                               "Unprotect the chip before doing any operation on it")
-					(OPT_FLASH_DESC  ",g",                                               "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+					(OPT_FLASH_DESC  ",g", po::value<std::string>(),                     "Custom chip geometry in format <block_size>:<block_count>:<sector_size>:<sector_count>:<unprotect-mask-hex> (example: 65536:4:4096:64:8c)")
+					(OPT_REGISTRY    ",R", po::value<std::string>(),                     "Path to flash registry")
 					(OPT_BAUD,             po::value<int>(),                             "Serial port baudrate")
 					(OPT_READ_BLOCK,       po::value<off_t>(),                           "Read block at index")
 					(OPT_READ_SECTOR,      po::value<off_t>(),                           "Read Sector at index")
@@ -199,6 +136,33 @@ int main(int argc, char *argv[]) {
 					}
 
 					debug_setLevel(level);
+				}
+
+				if (vm.count(OPT_REGISTRY)) {
+					auto reader = std::make_unique<FlashRegistryJsonReader>();
+
+					{
+						std::string   registryPath = vm[OPT_REGISTRY].as<std::string>();
+						std::ifstream registryStream(registryPath);
+
+						if (! registryStream.is_open()) {
+							ERROR("Unable to open flash registry file! (%s)", registryPath.c_str());
+							break;
+						}
+
+						reader->read(registryStream, flashRegistry);
+					}
+				}
+
+				for (const auto &flash : flashRegistry.getAll()) {
+					DEBUG("Chip part Id: %s", flash.getPartNumber().c_str());
+					DEBUG("   Manufacturer: %s", flash.getManufacturer().c_str());
+					DEBUG("   ID:           %02x, %02x, %02x", flash.getId()[0], flash.getId()[1], flash.getId()[2]);
+					DEBUG("   Protect_mask: %02x", flash.getProtectMask());
+					DEBUG("   Flash size:   %u", flash.getSize());
+					DEBUG("   Block size:   %u", flash.getBlockSize());
+					DEBUG("   Sector size:  %u", flash.getSectorSize());
+					DEBUG("   Page size:    %u", flash.getPageSize());
 				}
 
 				if (vm.count(OPT_BAUD)) {
@@ -254,7 +218,7 @@ int main(int argc, char *argv[]) {
 						&unprotectMask
 					) != 5
 					) {
-						OUT("Invalid flash-geometry syntax!");
+						OUT("Invalid flash-geometry syntax! (%s)", desc.c_str());
 
 						_usage(opDesc);
 					}
@@ -293,7 +257,7 @@ int main(int argc, char *argv[]) {
 					params.afterExecution = [&flashGeometry](const flashutil::EntryPoint::Parameters &params) {
 						if (flashGeometry.isValid()) {
 							OUT("Flash chip: %s (%02x, %02x, %02x), size: %zdB, blocks: %zd of %zdkB, sectors: %zd of %zdB",
-								flashGeometry.getName().c_str(), flashGeometry.getId()[0], flashGeometry.getId()[1], flashGeometry.getId()[2],
+								flashGeometry.getPartNumber().c_str(), flashGeometry.getId()[0], flashGeometry.getId()[1], flashGeometry.getId()[2],
 								flashGeometry.getSize(), flashGeometry.getBlockCount(), flashGeometry.getBlockSize() / 1024,
 								flashGeometry.getSectorCount(), flashGeometry.getSectorSize()
 							);

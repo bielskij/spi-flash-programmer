@@ -46,7 +46,7 @@ void Programmer::begin(const Flash *defaultGeometry) {
 		this->cmdGetInfo(id);
 
 		f.setId(id);
-		f.setName("Unknown chip");
+		f.setPartNumber("Unknown chip");
 
 		if (defaultGeometry != nullptr) {
 			f.setGeometry(*defaultGeometry);

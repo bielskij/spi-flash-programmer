@@ -14,7 +14,7 @@ FlashBuilder::FlashBuilder() {
 
 
 FlashBuilder &FlashBuilder::setName(const std::string &name) {
-	this->flash.setName(name);
+	this->flash.setPartNumber(name);
 	return *this;
 }
 
