@@ -40,15 +40,15 @@ target_link_libraries(flashutil PUBLIC
 	protocol
 )
 
-add_executable(flash-util-app
+add_executable(flash-util
 	${src_path}/main.cpp
 )
 
-target_include_directories(flash-util-app PRIVATE
+target_include_directories(flash-util PRIVATE
 	include
 )
 
-target_link_libraries(flash-util-app 
+target_link_libraries(flash-util 
 	PUBLIC
 		flashutil 
 		Boost::thread 

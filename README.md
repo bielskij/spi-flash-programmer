@@ -42,8 +42,9 @@ As a result a complete solution was implemented.
 
 ## Building and writing Arduino firmware.
 ```
-cd firmware
-make clean all burn
+mkdir build && cd build
+cmake ../recipes/firmware/arduino/
+make all upload_firmware
 ```
 
 ## Writing precompiled images.
@@ -55,7 +56,7 @@ cd firmware
 make HEX_FILE=dist/firmware_16mhz_19200bps.hex burn
 ```
 
-By default, **burn** target writes the firmware using avrdude via arduino programmer (arduino resistant bootloader). There is an other target **burn-usbasp** for writing firmware to raw atmega328p (USBasp programmer, ISP connection).
+By default, **burn** target writes the firmware using **avrdude** via **arduino** programmer (arduino resistant bootloader). There is an other target **burn-usbasp** for writing firmware to a raw **atmega328p** (USBasp programmer, ISP connection).
 
 ## RPi-Pico
 
@@ -91,9 +92,16 @@ make all
 
 ## Building flashutil.
 ```
-cd flashutil
-make clean all
+mkdir build && cd build
+cmake ../recipes/flashutil/
+make all
 ```
+
+### Flash chips repository.
+There is a predefined list of flash chips added to this project at ``flashutil/etc/chips.json``. It contains declaractions (geomtry) of all chips mentioned in the 'Features' section. 
+Other custom chips can be added by analogy without adding ``-g`` option to ``flash-util`` call.
+
+All size-related values are string values and optionally support binary metric modifiers such  as ``Kib``, ``Mib``, ``Gib`` (representing kibibit, mebibit, gigibit), as well as ``KiB``, ``MiB``, ``GiB`` (representing kibibyte, mebibyte, gigibyte).
 
 ## Use cases
   * Print help and exit
@@ -102,21 +110,21 @@ flash-util -h
 ```
   * Erase whole chip (without verification)
 ```
-flash-util -p /dev/ttyUSB0 -E
+flash-util -s /dev/ttyUSB0 -E
 ```
   * Erase whole chip (with verification)
 ```
-flash-util -p /dev/ttyUSB0 -E -V
+flash-util -s /dev/ttyUSB0 -E -V
 ```
   * Write image to chip (with verification)
 ```
-flash-util -p /dev/ttyUSB0 -W -i flash_image.bin -V
+flash-util -s /dev/ttyUSB0 -W -i flash_image.bin -V
 ```
   * Read whole chip
 ```
-flash-util -p /dev/ttyUSB0 -R -o /tmp/flash.bin 
+flash-util -s /dev/ttyUSB0 -R -o /tmp/flash.bin 
 ```
   * Writing image to unknown chip
 ```
-flash-util -p /dev/ttyUSB0 -E -V --flash-geometry  65536:64:4096:1024:fc
+flash-util -s /dev/ttyUSB0 -E -V --flash-geometry  65536:64:4096:1024:fc
 ```
