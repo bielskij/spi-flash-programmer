@@ -25,6 +25,8 @@ set(AVR_L_FUSE 0xF7)
 set(AVR_H_FUSE 0xD9)
 set(AVR_E_FUSE 0xFF) 
 
+set(BURN_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/burn.sh)
+
 if(NOT AVR_UPLOADTOOL_PORT)
 	set(AVR_UPLOADTOOL_PORT ${DEFAULT_AVR_UPLOADTOOL_PORT} CACHE STRING "Set default upload tool port: ${DEFAULT_AVR_UPLOADTOOL_PORT}")
 endif()
@@ -45,10 +47,10 @@ if(NOT FW_BAUD)
 	set(FW_BAUD ${DEFAULT_FW_BAUD} CACHE STRING "Set default serial baudrate: ${DEFAULT_FW_BAUD}")
 endif()
 
-set(AVR_UPLOADTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_PROGRAMMER})
+set(BURN_SCRIPT_BASE_OPTIONS -m ${AVR_MCU} -P ${AVR_PROGRAMMER} -p ${AVR_UPLOADTOOL_PORT})
 
 if(AVR_UPLOADTOOL_BAUDRATE)
-	set(AVR_UPLOADTOOL_BASE_OPTIONS ${AVR_UPLOADTOOL_BASE_OPTIONS} -b ${AVR_UPLOADTOOL_BAUDRATE})
+	set(BURN_SCRIPT_BASE_OPTIONS ${BURN_SCRIPT_BASE_OPTIONS} -b ${AVR_UPLOADTOOL_BAUDRATE})
 endif()
 
 set(AVR_SIZE_ARGS -C;--mcu=${AVR_MCU})
@@ -136,9 +138,8 @@ add_custom_target(
 
 add_custom_target(
 	upload_${EXECUTABLE_NAME}
-		${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} ${AVR_UPLOADTOOL_OPTIONS}
-			-U flash:w:${hex_file}
-			-P ${AVR_UPLOADTOOL_PORT}
+		${BURN_SCRIPT} ${BURN_SCRIPT_BASE_OPTIONS} -f ${hex_file}
+
 	DEPENDS 
 		${hex_file}
 
@@ -148,9 +149,8 @@ add_custom_target(
 
 add_custom_target(
 	upload_${EXECUTABLE_NAME}_eeprom
-		${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} ${AVR_UPLOADTOOL_OPTIONS}
-			-U eeprom:w:${eeprom_image}
-			-P ${AVR_UPLOADTOOL_PORT}
+		${BURN_SCRIPT} ${BURN_SCRIPT_BASE_OPTIONS} -e ${eeprom_image} 
+		
 	DEPENDS 
 		${eeprom_image}
 
@@ -158,21 +158,11 @@ add_custom_target(
 		"Uploading ${eeprom_image} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
 )
 
-add_custom_target(
-	get_fuses
-		${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT} -n
-			-U lfuse:r:-:b
-			-U hfuse:r:-:b
-	COMMENT
-		"Get fuses from ${AVR_MCU}"
-)
 
 add_custom_target(
 	set_fuses
-		${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT}
-			-U lfuse:w:${AVR_L_FUSE}:m
-			-U hfuse:w:${AVR_H_FUSE}:m
-			-U efuse:w:${AVR_E_FUSE}:m
+		${BURN_SCRIPT} ${BURN_SCRIPT_BASE_OPTIONS} -L ${AVR_L_FUSE} -H ${AVR_H_FUSE} -E ${AVR_E_FUSE}
+		
 	COMMENT
 		"Setup: High Fuse: ${AVR_H_FUSE} Low Fuse: ${AVR_L_FUSE}, Extended Fuse: ${AVR_E_FUSE}"
 )

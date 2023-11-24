@@ -43,20 +43,25 @@ As a result a complete solution was implemented.
 ## Building and writing Arduino firmware.
 ```
 mkdir build && cd build
-cmake ../recipes/firmware/arduino/
+cmake -S ../recipes/firmware/arduino/ -B .
 make all upload_firmware
 ```
 
 ## Writing precompiled images.
 
-**NOTE** Prebuilt firmware is available at ``firmware/dist/firmware_<clk>_<baud>.hex``
+**NOTE** Prebuilt firmware is available at ``firmware/arduino/dist/firmware_<clk>_<baud>.hex``
 
 ```
-cd firmware
-make HEX_FILE=dist/firmware_16mhz_19200bps.hex burn
+cd firmware/arduino
+./burn.sh -m atmega328p -f dist/firmware_16mhz_19200bps.hex
 ```
 
-By default, **burn** target writes the firmware using **avrdude** via **arduino** programmer (arduino resistant bootloader). There is an other target **burn-usbasp** for writing firmware to a raw **atmega328p** (USBasp programmer, ISP connection).
+By default, **burn.sh** scripts writes the firmware using **avrdude** via **arduino** programmer (arduino resistant bootloader). Programmer type, MCU and optional communication baudrate can be adjusted for particular hardware configuration. Please find the following syntax of burn.sh script:
+
+```
+Usage:
+   ./burn.sh <-m mcu> [-P programmer] [-p port] [-b baudrate] [-m mcu] [-L lfuse] [-H hfuse] [-E efuse] [-f flash.hex] [-e e2prom.hex]
+```
 
 ## RPi-Pico
 
