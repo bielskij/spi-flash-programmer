@@ -110,19 +110,7 @@ class Spi {
 		class Capabilities {
 			public:
 				Capabilities() {
-					this->_transferSizeMax = 0;
 				}
-
-				std::size_t getTransferSizeMax() {
-					return this->_transferSizeMax;
-				}
-
-				void setTransferSizeMax(std::size_t size) {
-					this->_transferSizeMax = size;
-				}
-
-			private:
-				std::size_t _transferSizeMax;
 		};
 
 	public:

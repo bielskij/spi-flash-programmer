@@ -68,14 +68,14 @@ static OperationHandlers _getHandlers() {
 
 					case EntryPoint::Mode::BLOCK:
 						size    = programmer.getFlashInfo().getBlockSize();
-						operand = [address](Programmer &prog) {
+						operand = [&address](Programmer &prog) {
 							prog.eraseBlockByAddress(address);
 						};
 						break;
 
 					case EntryPoint::Mode::SECTOR:
 						size    = programmer.getFlashInfo().getSectorSize();
-						operand = [address](Programmer &prog) {
+						operand = [&address](Programmer &prog) {
 							prog.eraseSectorByAddress(address);
 						};
 						break;

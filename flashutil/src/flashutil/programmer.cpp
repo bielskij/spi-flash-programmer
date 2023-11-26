@@ -120,7 +120,7 @@ void Programmer::verifyFlashInfoAreaByAddress(uint32_t address, size_t size, siz
 
 	if (alignment > 0) {
 		if ((address % alignment) != 0) {
-			throw std::runtime_error("Address is not a multiple of " + std::to_string(alignment) + "!");
+			throw std::runtime_error("Address " + std::to_string(address) + " is not a multiple of " + std::to_string(alignment) + "!");
 		}
 	}
 }

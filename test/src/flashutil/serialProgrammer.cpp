@@ -309,8 +309,6 @@ struct SerialProgrammer::Impl {
 	DummyFlash           flash;
 
 	Impl(const Flash &flashInfo, size_t transferSize) : packetBuffer(transferSize), flash(flashInfo) {
-		this->capabilities.setTransferSizeMax(transferSize);
-
 		programmer_setup(
 			&this->programmer,
 			this->packetBuffer.data(),
