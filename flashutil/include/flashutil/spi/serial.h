@@ -1,5 +1,5 @@
 /*
- * serial.h
+ * flashutil/spi/serial.h
  *
  *  Created on: 6 mar 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)

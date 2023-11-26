@@ -1,12 +1,12 @@
 /*
- * flash/registry.h
+ * flashutil/flash/registry.h
  *
  *  Created on: 8 wrz 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef BUILDER_H_
-#define BUILDER_H_
+#ifndef FLASHUTIL_FLASH_BUILDER_H_
+#define FLASHUTIL_FLASH_BUILDER_H_
 
 #include <string>
 #include <vector>
@@ -36,4 +36,4 @@ class FlashBuilder {
 		Flash flash;
 };
 
-#endif /* BUILDER_H_ */
+#endif /* FLASHUTIL_FLASH_BUILDER_H_ */

@@ -1,5 +1,6 @@
 #include "common/crc8.h"
 
+
 uint8_t crc8_getForByte(uint8_t byte, uint8_t polynomial, uint8_t start) {
 	uint8_t remainder = start;
 

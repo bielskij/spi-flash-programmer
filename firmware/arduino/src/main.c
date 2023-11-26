@@ -5,7 +5,6 @@
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-
 #include <avr/io.h>
 
 #include "common/protocol.h"

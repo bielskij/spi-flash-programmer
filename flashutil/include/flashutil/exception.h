@@ -1,12 +1,12 @@
 /*
- * exception.h
+ * flashutil/exception.h
  *
  *  Created on: 7 mar 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef EXCEPTION_H_
-#define EXCEPTION_H_
+#ifndef FLASHUTIL_EXCEPTION_H_
+#define FLASHUTIL_EXCEPTION_H_
 
 #include <stdexcept>
 #include <string>
@@ -26,4 +26,4 @@ class Exception : public std::runtime_error {
 
 #define throw_Exception(msg) do { throw Exception(__FILE__, __LINE__, msg); } while (0);
 
-#endif /* EXCEPTION_H_ */
+#endif /* FLASHUTIL_EXCEPTION_H_ */

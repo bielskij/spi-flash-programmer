@@ -1,12 +1,12 @@
 /*
- * flash/registry.h
+ * flashutil/flash/registry.h
  *
- *  Created on: 8 wrz 2023
+ *  Created on: 8 sep 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef FLASH_REGISTRY_H_
-#define FLASH_REGISTRY_H_
+#ifndef FLASHUTIL_FLASH_REGISTRY_H_
+#define FLASHUTIL_FLASH_REGISTRY_H_
 
 #include "flashutil/flash.h"
 
@@ -26,4 +26,4 @@ class FlashRegistry {
 };
 
 
-#endif /* FLASH_REGISTRY_H_ */
+#endif /* FLASHUTIL_FLASH_REGISTRY_H_ */

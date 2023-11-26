@@ -1,5 +1,5 @@
 /*
- * serial.h
+ * flashutil/serial/hw.h
  *
  *  Created on: 6 mar 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)

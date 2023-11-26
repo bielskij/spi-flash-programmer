@@ -1,13 +1,13 @@
 /*
- * flash.h
+ * flashutil/flash.h
  *
  *  Created on: 8 wrz 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
 
-#ifndef FLASH_H_
-#define FLASH_H_
+#ifndef FLASHUTIL_FLASH_H_
+#define FLASHUTIL_FLASH_H_
 
 #include <string>
 #include <vector>
@@ -70,4 +70,4 @@ class Flash {
 };
 
 
-#endif /* FLASH_H_ */
+#endif /* FLASHUTIL_FLASH_H_ */

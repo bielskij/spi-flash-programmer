@@ -1,3 +1,10 @@
+/*
+ * flashutil/entryPoint.h
+ *
+ *  Created on: 17 oct 2023
+ *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
+ */
+
 #ifndef FLASHUTIL_ENTRYPOINT_H_
 #define FLASHUTIL_ENTRYPOINT_H_
 

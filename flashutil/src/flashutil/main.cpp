@@ -1,7 +1,7 @@
 /*
  * main.c
  *
- *  Created on: 27 lut 2022
+ *  Created on: 27 feb 2022
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 #include <iostream>

@@ -17,6 +17,7 @@ As a result a complete solution was implemented.
         * W25Q80
     * Generic chips
         * easy configurable with ``--flash-geometry`` parameter
+        * easy configurable via ``chips.json``
   * unprotect operation
   * erase/write verification
   * communication protocol secured by CRC checksum

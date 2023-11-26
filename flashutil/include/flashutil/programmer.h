@@ -1,12 +1,12 @@
 /*
- * programmer.h
+ * flashutil/programmer.h
  *
  *  Created on: 8 wrz 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef PROGRAMMER_H_
-#define PROGRAMMER_H_
+#ifndef FLASHUTIL_PROGRAMMER_H_
+#define FLASHUTIL_PROGRAMMER_H_
 
 #include <vector>
 
@@ -65,4 +65,4 @@ class Programmer {
 };
 
 
-#endif /* PROGRAMMER_H_ */
+#endif /* FLASHUTIL_PROGRAMMER_H_ */

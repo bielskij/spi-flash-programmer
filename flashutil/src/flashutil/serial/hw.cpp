@@ -174,15 +174,13 @@ void HwSerial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 
 		case Result::SUCCESS:
 			{
-				DEBUG("RESULT_SUCCESS");
-
 				self->timeoutTimer.cancel();
 			}
 			break;
 
 		case Result::TIMEOUT:
 			{
-				DEBUG("RESULT_TIMEOUT");
+				WARN("RESULT_TIMEOUT");
 
 				self->serial.cancel();
 

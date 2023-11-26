@@ -1,12 +1,12 @@
 /*
- * spi.h
+ * flashutil/spi.h
  *
  *  Created on: 6 mar 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef SPI_H_
-#define SPI_H_
+#ifndef FLASHUTIL_SPI_H_
+#define FLASHUTIL_SPI_H_
 
 #include <set>
 #include <map>
@@ -142,4 +142,4 @@ class Spi {
 		Spi() {}
 };
 
-#endif /* SPI_H_ */
+#endif /* FLASHUTIL_SPI_H_ */

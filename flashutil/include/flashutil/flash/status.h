@@ -1,7 +1,7 @@
 /*
- * status.h
+ * flashutil/flash/status.h
  *
- *  Created on: 1 lis 2023
+ *  Created on: 1 nov 2023
  *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 

@@ -1,5 +1,12 @@
-#ifndef FLASHUTIL_INCLUDE_DEBUG_H_
-#define FLASHUTIL_INCLUDE_DEBUG_H_
+/*
+ * flashutil/debug.h
+ *
+ *  Created on: 17 oct 2023
+ *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
+ */
+
+#ifndef FLASHUTIL_DEBUG_H_
+#define FLASHUTIL_DEBUG_H_
 
 #include <stdint.h>
 #include <ctype.h>
@@ -49,4 +56,4 @@ void debug_dumpBuffer(DebugLevel level, uint8_t *buffer, uint32_t bufferSize, ui
 }
 #endif
 
-#endif /* FLASHUTIL_INCLUDE_DEBUG_H_ */
+#endif /* FLASHUTIL_DEBUG_H_ */
