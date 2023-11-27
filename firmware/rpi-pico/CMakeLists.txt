@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.12)
 
-set(PICO_SDK_PATH ${CMAKE_CURRENT_SOURCE_DIR}/pico-sdk)
+set(BASE_DIR ${CMAKE_CURRENT_LIST_DIR})
+
+set(PICO_SDK_PATH ${BASE_DIR}/pico-sdk)
 
 # Pull in SDK (must be before project)
-include(cmake/pico_sdk_import.cmake)
+include(${BASE_DIR}/cmake/pico_sdk_import.cmake)
 
 # include(pico_extras_import_optional.cmake)
 
@@ -18,13 +20,6 @@ endif()
 # Initialize the SDK
 pico_sdk_init()
 
-#include(example_auto_set_url.cmake)
-# Add blink example
-#add_subdirectory(blink)
-
-# Add hello world example
-#add_subdirectory(hello_world)
-
 add_compile_options(
 	-Wall
 	-Wno-format          # int != int32_t as far as the compiler is concerned because gcc has int32_t as long int
@@ -33,27 +28,25 @@ add_compile_options(
 )
 
 add_executable(firmware
-	src/main.c
-	src/usb_descriptors.c
-
-	../common/src/firmware/programmer.c
-	../../common/src/crc8.c
+	${BASE_DIR}/src/main.c
+	${BASE_DIR}/src/usb_descriptors.c
 )
 
 target_include_directories(firmware PRIVATE
-	include
-
-	../common/include
-	../../common/include
+	${BASE_DIR}/include
 )
 
-target_link_libraries(firmware PRIVATE 
-	pico_stdlib
-	hardware_uart
-	hardware_pio
-	hardware_spi
-	tinyusb_device
-	tinyusb_board
+target_link_libraries(firmware
+	PRIVATE 
+		pico_stdlib
+		hardware_uart
+		hardware_pio
+		hardware_spi
+		tinyusb_device
+		tinyusb_board
+		
+		firmware-common
+		protocol
 )
 
 pico_add_extra_outputs(firmware)
