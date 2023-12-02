@@ -116,21 +116,21 @@ flash-util -h
 ```
   * Erase whole chip (without verification)
 ```
-flash-util -s /dev/ttyUSB0 -E
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -e
 ```
   * Erase whole chip (with verification)
 ```
-flash-util -s /dev/ttyUSB0 -E -V
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -e -V
 ```
   * Write image to chip (with verification)
 ```
-flash-util -s /dev/ttyUSB0 -W -i flash_image.bin -V
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -w -i /tmp/flash.src.bin -V
 ```
   * Read whole chip
 ```
-flash-util -s /dev/ttyUSB0 -R -o /tmp/flash.bin 
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -r -o /tmp/flash.dst.bin
 ```
   * Writing image to unknown chip
 ```
-flash-util -s /dev/ttyUSB0 -E -V --flash-geometry  65536:64:4096:1024:fc
+flash-util -s /dev/ttyUSB0 -e -w -i /tmp/flash.src.bin -V --flash-geometry  65536:64:4096:1024:fc
 ```

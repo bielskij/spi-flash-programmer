@@ -1,9 +1,12 @@
+#include <fstream>
+#include <libgen.h>
 #include <gtest/gtest.h>
 
 #include "flashutil/spi/serial.h"
 #include "flashutil/serial/hw.h"
 #include "flashutil/programmer.h"
 #include "flashutil/entryPoint.h"
+#include "flashutil/flash/registry/reader/json.h"
 #include "flashutil/debug.h"
 
 #include "serialProgrammer.h"
@@ -24,6 +27,18 @@
 
 static FlashRegistry &getFlashRegistry() {
 	static FlashRegistry registry;
+
+	{
+		FlashRegistryJsonReader reader;
+
+		std::string path = __FILE__;
+
+		path = path.substr(0, path.rfind('/'));
+
+		std::ifstream stream(path + "/../../../flashutil/etc/chips.json");
+
+		reader.read(stream, registry);
+	}
 
 	return registry;
 }
@@ -89,7 +104,7 @@ TEST(flashutil_entry_point, write_erase_block) {
 
 	std::unique_ptr<Spi> spi = std::make_unique<SerialSpi>(*serial.get());
 
-	FlashRegistry registry;
+	debug_setLevel(DebugLevel::DEBUG_LEVEL_INFO);
 
 	{
 		std::stringstream  block1Stream;
@@ -228,5 +243,101 @@ TEST(flashutil_entry_point, write_erase_block) {
 		}
 
 		flashutil::EntryPoint::call(*spi.get(), getFlashRegistry(), flashInfo, operations);
+	}
+}
+
+
+TEST(flashutil_entry_point, write_program_whole) {
+	Flash flashInfo;
+
+	auto serial = createSerial(flashInfo);
+
+	std::unique_ptr<Spi> spi = std::make_unique<SerialSpi>(*serial.get());
+
+	size_t chipSize = 0;
+
+	debug_setLevel(DebugLevel::DEBUG_LEVEL_INFO);
+
+	{
+		flashutil::EntryPoint::Parameters params;
+
+		params.operation = flashutil::EntryPoint::Operation::NO_OPERATION;
+		params.mode      = flashutil::EntryPoint::Mode::CHIP;
+		params.flashInfo = &flashInfo;
+
+		flashutil::EntryPoint::call(*spi.get(), getFlashRegistry(), flashInfo, params);
+
+		chipSize = flashInfo.getSize();
+	}
+
+	ASSERT_GT(chipSize, 0);
+
+	std::cout << "Testing on flash with size: " << std::to_string(chipSize) << std::endl;
+
+	{
+		std::vector<flashutil::EntryPoint::Parameters> operations;
+
+		std::string       randomData;
+		std::stringstream readData;
+
+		for (size_t i = 0; i < chipSize; i++) {
+			randomData.push_back(rand() % 0xff);
+		}
+
+		std::stringstream srcData(randomData);
+
+		// unlock
+		{
+			flashutil::EntryPoint::Parameters params;
+
+			params.operation           = flashutil::EntryPoint::Operation::UNLOCK;
+			params.mode                = flashutil::EntryPoint::Mode::CHIP;
+			params.omitRedundantWrites = true;
+			params.verify              = true;
+
+			operations.push_back(params);
+		}
+
+		// Erase
+		{
+			flashutil::EntryPoint::Parameters params;
+
+			params.operation           = flashutil::EntryPoint::Operation::ERASE;
+			params.mode                = flashutil::EntryPoint::Mode::CHIP;
+			params.omitRedundantWrites = false;
+			params.verify              = true;
+
+			operations.push_back(params);
+		}
+
+		// Write
+		{
+			flashutil::EntryPoint::Parameters params;
+
+			params.operation           = flashutil::EntryPoint::Operation::WRITE;
+			params.mode                = flashutil::EntryPoint::Mode::CHIP;
+			params.omitRedundantWrites = false;
+			params.verify              = true;
+			params.inStream            = &srcData;
+			params.index               = 0;
+
+			operations.push_back(params);
+		}
+
+		// Read
+		{
+			flashutil::EntryPoint::Parameters params;
+
+			params.operation = flashutil::EntryPoint::Operation::READ;
+			params.mode      = flashutil::EntryPoint::Mode::CHIP;
+			params.outStream = &readData;
+			params.index     = 0;
+
+			operations.push_back(params);
+		}
+
+		flashutil::EntryPoint::call(*spi.get(), getFlashRegistry(), flashInfo, operations);
+
+		ASSERT_EQ(randomData, readData.str());
 	}
 }

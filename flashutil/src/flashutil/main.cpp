@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
 				std::ofstream outFile;
 
 				opDesc.add_options()
-					(OPT_VERBOSE     ",v", po::value<int>()->default_value(DEBUG_LEVEL_INFO), "Verbose output (0 - 5)")
+					(OPT_VERBOSE     ",v", po::value<int>()->default_value(DEBUG_LEVEL_NONE), "Verbose output (0 - 5)")
 
 					(OPT_HELP        ",h",                                               "Print usage message")
 					(OPT_SERIAL      ",s", po::value<std::string>(),                     "Serial port path")
@@ -262,6 +262,9 @@ int main(int argc, char *argv[]) {
 								flashGeometry.getSectorCount(), flashGeometry.getSectorSize()
 							);
 
+						} else if (flashGeometry.isIdValid()) {
+							OUT("Detected flash chip of ID %02x, %02x, %02x but its geometry is unknown (No declaration has been found in registry)", flashGeometry.getId()[0], flashGeometry.getId()[1], flashGeometry.getId()[2]);
+
 						} else {
 							OUT("No flash device detected!");
 						}
@@ -303,7 +306,7 @@ int main(int argc, char *argv[]) {
 						params.index = vm[OPT_ERASE_BLOCK].as<off_t>();
 
 						params.beforeExecution = [&flashGeometry](const flashutil::EntryPoint::Parameters &params) {
-							OUT("Erasing block %u (%08x): ", params.index, params.index * flashGeometry.getBlockSize());
+							OUT("Erasing block %u (%08x)", params.index, params.index * flashGeometry.getBlockSize());
 						};
 
 						operations.push_back(params);
@@ -314,7 +317,7 @@ int main(int argc, char *argv[]) {
 						params.index = vm[OPT_ERASE_SECTOR].as<off_t>();
 
 						params.beforeExecution = [&flashGeometry](const flashutil::EntryPoint::Parameters &params) {
-							OUT("Erasing sector %u (%08x): ", params.index, params.index * flashGeometry.getSectorSize());
+							OUT("Erasing sector %u (%08x)", params.index, params.index * flashGeometry.getSectorSize());
 						};
 
 						operations.push_back(params);
@@ -340,7 +343,7 @@ int main(int argc, char *argv[]) {
 						params.index = vm[OPT_WRITE_BLOCK].as<off_t>();
 
 						params.beforeExecution = [&flashGeometry](const flashutil::EntryPoint::Parameters &params) {
-							OUT("Writing block %u (%08x): ", params.index, params.index * flashGeometry.getBlockSize());
+							OUT("Writing block %u (%08x)", params.index, params.index * flashGeometry.getBlockSize());
 						};
 
 						operations.push_back(params);
@@ -351,7 +354,7 @@ int main(int argc, char *argv[]) {
 						params.index = vm[OPT_WRITE_SECTOR].as<off_t>();
 
 						params.beforeExecution = [&flashGeometry](const flashutil::EntryPoint::Parameters &params) {
-							OUT("Writing sector %u (%08x): ", params.index, params.index * flashGeometry.getSectorSize());
+							OUT("Writing sector %u (%08x)", params.index, params.index * flashGeometry.getSectorSize());
 						};
 
 						operations.push_back(params);
@@ -377,7 +380,7 @@ int main(int argc, char *argv[]) {
 						params.index = vm[OPT_READ_BLOCK].as<off_t>();
 
 						params.beforeExecution = [&flashGeometry](const flashutil::EntryPoint::Parameters &params) {
-							OUT("Reading block %u (%08x): ", params.index, params.index * flashGeometry.getBlockSize());
+							OUT("Reading block %u (%08x)", params.index, params.index * flashGeometry.getBlockSize());
 						};
 
 						operations.push_back(params);
@@ -388,7 +391,7 @@ int main(int argc, char *argv[]) {
 						params.index = vm[OPT_READ_SECTOR].as<off_t>();
 
 						params.beforeExecution = [&flashGeometry](const flashutil::EntryPoint::Parameters &params) {
-							OUT("Reading sector %u (%08x): ", params.index, params.index * flashGeometry.getSectorSize());
+							OUT("Reading sector %u (%08x)", params.index, params.index * flashGeometry.getSectorSize());
 						};
 
 						operations.push_back(params);

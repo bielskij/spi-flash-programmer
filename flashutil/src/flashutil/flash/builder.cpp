@@ -8,7 +8,7 @@
 #include "flashutil/flash/builder.h"
 
 
-FlashBuilder::FlashBuilder() {
+FlashBuilder::FlashBuilder() : flash() {
 
 }
 

@@ -46,8 +46,6 @@ TEST_P(RequestTestWithParameter, common_protocol_request) {
 
 		proto_req_init(&req, pkt.payload, pkt.payloadSize, pkt.code);
 
-		std::cout << "Testing command: " + std::to_string(GetParam().cmd) << std::endl;
-
 		if (GetParam().prepareReq) {
 			GetParam().prepareReq(req);
 		}

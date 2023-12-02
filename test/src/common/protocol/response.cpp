@@ -49,8 +49,6 @@ TEST_P(ResponseTestWithParameter, common_protocol_response) {
 
 		proto_res_init(&res, pkt.payload, pkt.payloadSize, GetParam().cmd);
 
-		std::cout << "Testing command: " << std::to_string(GetParam().cmd) << ", code: " << std::to_string(GetParam().code) << std::endl;
-
 		if (GetParam().prepareRes) {
 			GetParam().prepareRes(res);
 		}

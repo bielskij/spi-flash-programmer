@@ -121,7 +121,7 @@ static OperationHandlers _getHandlers() {
 					}
 
 					if (erased) {
-						INFO("Flash chip erased.");
+						INFO("Flash area erased.");
 					}
 				}
 			};
@@ -202,7 +202,7 @@ static OperationHandlers _getHandlers() {
 				if (doWrite) {
 					std::vector<uint8_t> page(flashInfo.getPageSize(), 0xff);
 
-					while (! params.inStream->eof()) {
+					while (! params.inStream->eof() && size > 0) {
 						bool     pageWrite = true;
 						uint32_t pageIdx   = address / flashInfo.getPageSize();
 
@@ -256,6 +256,7 @@ static OperationHandlers _getHandlers() {
 						}
 
 						address += page.size();
+						size    -= page.size();
 					}
 				}
 			};

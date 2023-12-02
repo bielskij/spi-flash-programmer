@@ -83,7 +83,7 @@ void debug_log(DebugLevel level, const char *fileName, int lineNo, const char *f
 			}
 		}
 
-		printf("%s[%s] <%s:%5d> %s%16s(): ",
+		fprintf(stderr, "%s[%s] <%s:%5d> %s%16s(): ",
 			levelColor != NULL ? levelColor : "",
 			levelString,
 			fileName,
@@ -97,12 +97,12 @@ void debug_log(DebugLevel level, const char *fileName, int lineNo, const char *f
 
 			va_start(ap, fmt);
 			{
-				vprintf(fmt, ap);
+				vfprintf(stderr, fmt, ap);
 			}
 			va_end(ap);
 		}
 
-		printf("\n");
+		fprintf(stderr, "\n");
 	}
 }
 

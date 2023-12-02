@@ -13,7 +13,7 @@
 #include "flashutil/flash/builder.h"
 #include "flashutil/debug.h"
 
-#define ERASE_CHIP_TIMEOUT_MS    30000
+#define ERASE_CHIP_TIMEOUT_MS    (5 * 60 * 1000)
 #define ERASE_BLOCK_TIMEOUT_MS   10000
 #define ERASE_SECTOR_TIMEOUT_MS    500
 #define WRITE_STATUS_TIMEOUT_MS    200

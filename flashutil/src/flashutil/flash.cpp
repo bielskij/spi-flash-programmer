@@ -13,7 +13,7 @@ Flash::Flash() {
 	this->blockCount  = 0;
 	this->sectorSize  = 0;
 	this->sectorCount = 0;
-	this->pageSize    = 0;
+	this->pageSize    = 256;
 	this->pageCount   = 0;
 	this->protectMask = 0;
 }
@@ -28,7 +28,6 @@ Flash::Flash(const std::string &name, const std::vector<uint8_t> &jedecId, size_
 	this->setSectorCount(nSectors);
 	this->setProtectMask(protectMask);
 
-	this->setPageSize(256);
 	this->setPageCount(this->getSize() / this->getPageSize());
 }
 
