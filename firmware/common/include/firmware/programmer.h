@@ -1,45 +1,45 @@
 /*
- * programmer.h
+ * firmware/programmer.h
  *
- *  Created on: 29 mar 2023
- *      Author: bielski.j@gmail.com
+ *  Created on: 28 lip 2023
+ *      Author: Jaroslaw Bielski (bielski.j@gmail.com)
  */
 
-#ifndef FIRMWARE_COMMON_PROTOCOL_H_
-#define FIRMWARE_COMMON_PROTOCOL_H_
+#include "common/protocol/request.h"
+#include "common/protocol/response.h"
 
-#include <stdint.h>
-#include <stdbool.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef void (*SpiTransferCallback)(void *buffer, uint16_t txSize, uint16_t rxSize, void *callbackData);
-typedef void (*SpiCsCallback)(bool assert, void *callbackData);
+typedef void (*ProgrammerRequestCallback)(ProtoReq *request, ProtoRes *response, void *callbackData);
+typedef void (*ProgrammerResponseCallback)(uint8_t *buffer, uint16_t bufferSize, void *callbackData);
 
-typedef void (*SerialSendCallback)(uint8_t data, void *callbackData);
-typedef void (*SerialFlushCallback)(void *callbackData);
+typedef struct _Programmer {
+	uint8_t *mem;
+	uint16_t memSize;
 
+	ProtoPktDes packetDeserializer;
 
-typedef struct _ProgrammerSetupParameters {
-	// Memory used by programmer for:
-	//  - holding internal structures
-	//  - handling input data
-	void    *memory;
-	uint16_t memorySize;
-
-	SpiTransferCallback spiTransferCallback;
-	SpiCsCallback       spiCsCallback;
-
-	SerialSendCallback  serialSendCallback;
-	SerialFlushCallback serialFlushCallback;
-
-	void *callbackData;
-} ProgrammerSetupParameters;
+	ProgrammerRequestCallback  requestCallback;
+	ProgrammerResponseCallback responseCallback;
+	void                      *callbackData;
+} Programmer;
 
 
-bool programmer_setup(ProgrammerSetupParameters *parameters);
+void programmer_setup(
+	Programmer                *programmer,
+	uint8_t                   *memory,
+	uint16_t                   memorySize,
+	ProgrammerRequestCallback  requestCallback,
+	ProgrammerResponseCallback responseCallback,
+	void                      *callbackData
+);
 
-void programmer_onByte(uint8_t data);
-void programmer_onData(uint8_t *data, uint16_t dataSize);
-void programmer_onIdle();
+void programmer_putByte(Programmer *programmer, uint8_t byte);
 
+void programmer_reset(Programmer *programmer);
 
-#endif /* FIRMWARE_COMMON_PROTOCOL_H_ */
+#ifdef __cplusplus
+}
+#endif

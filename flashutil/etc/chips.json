@@ -1,0 +1,58 @@
+[
+	{
+		"part_number":  "MX25L2026E/MX25l2005A",
+		"manufacturer": "Macronix",
+		"jedec_id": [
+			"0xc2", "0x20", "0x12"
+		],
+		"geometry": {
+			"size":         "2Mib",
+			"block_size":  "64KiB",
+			"sector_size":  "4KiB",
+			"page_size":       256
+		},
+		"unprotect_mask": "0x8c"
+	},
+	{
+		"part_number":  "MX25V16066",
+		"manufacturer": "Macronix",
+		"jedec_id": [
+			"0xc2", "0x20", "0x15"
+		],
+		"geometry": {
+			"size":        "16Mib",
+			"block_size":  "64KiB",
+			"sector_size":  "4KiB",
+			"page_size":       256
+		},
+		"unprotect_mask": "0xbc"
+	},
+	{
+		"part_number":  "W25Q32",
+		"manufacturer": "Winbond",
+		"jedec_id": [
+			"0xef", "0x40", "0x16"
+		],
+		"geometry": {
+			"size":        "32Mib",
+			"block_size":  "64KiB",
+			"sector_size":  "4KiB",
+			"page_size":       256
+		},
+		"unprotect_mask": "0xfc"
+	},
+	{
+		"part_number":  "W25Q80",
+		"manufacturer": "GigaDevice",
+		"jedec_id": [
+			"0xc8", "0x40", "0x14"
+		],
+		"geometry": {
+			"size":         "8Mib",
+			"block_size":  "64KiB",
+			"sector_size":  "4KiB",
+			"page_size":       256
+		},
+		"unprotect_mask": "0x7c"
+	}
+]

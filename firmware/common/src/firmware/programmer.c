@@ -1,291 +1,116 @@
-/*
- * programmer.cpp
- *
- *  Created on: 29 mar 2023
- *      Author: bielski.j@gmail.com
- */
-#include <stdlib.h>
-#include <string.h>
-
-#include "protocol.h"
-#include "crc8.h"
+#include "common/protocol.h"
 
 #include "firmware/programmer.h"
 
 
-typedef enum _RxState {
-	RX_STATE_WAIT_SYNC,
-	RX_STATE_WAIT_CMD,
+void programmer_setup(
+	Programmer                *programmer,
+	uint8_t                   *memory,
+	uint16_t                   memorySize,
+	ProgrammerRequestCallback  requestCallback,
+	ProgrammerResponseCallback responseCallback,
+	void                      *callbackData
+) {
+	programmer->mem     = memory;
+	programmer->memSize = memorySize;
 
-	RX_STATE_WAIT_DATA_LEN_HI,
-	RX_STATE_WAIT_DATA_LEN_LO,
+	programmer->requestCallback  = requestCallback;
+	programmer->responseCallback = responseCallback;
+	programmer->callbackData     = callbackData;
 
-	RX_STATE_WAIT_DATA,
-
-	RX_STATE_WAIT_CRC
-} RxState;
-
-
-typedef struct _Context {
-	ProgrammerSetupParameters params;
-
-	uint16_t idleCounter;
-	RxState  rxState;
-
-	uint8_t  pendingCmdCrc;
-	uint8_t  pendingCmd;
-
-	uint16_t pendingDataSize;
-	uint16_t pendingDataRead;
-
-	uint16_t toSend;
-	uint16_t toRecv;
-} Context;
-
-
-static Context *_ctx = NULL;
-
-
-static void _resetRx() {
-	_ctx->pendingCmd    = 0xff;
-	_ctx->pendingCmdCrc = 0;
-
-	_ctx->toRecv = 0;
-	_ctx->toSend = 0;
-
-	_ctx->pendingDataRead = 0;
-	_ctx->pendingDataSize = 0;
-
-	_ctx->rxState = RX_STATE_WAIT_SYNC;
+	proto_pkt_dec_setup(
+		&programmer->packetDeserializer,
+		programmer->mem,
+		programmer->memSize
+	);
 }
 
 
-static void _response(uint8_t code, uint8_t *buffer, uint16_t bufferSize) {
-	SerialSendCallback sendCb     = _ctx->params.serialSendCallback;
-	void              *sendCbData = _ctx->params.callbackData;
-
-	if (sendCb) {
-		uint8_t crc = PROTO_CRC8_START;
-
-		sendCb(PROTO_SYNC_BYTE, sendCbData);
-		crc = crc8_getForByte(PROTO_SYNC_BYTE, PROTO_CRC8_POLY, crc);
-
-		sendCb(code, sendCbData);
-		crc = crc8_getForByte(code, PROTO_CRC8_POLY, crc);
-
-		sendCb(bufferSize >> 8, sendCbData);
-		crc = crc8_getForByte(bufferSize >> 8, PROTO_CRC8_POLY, crc);
-
-		sendCb(bufferSize & 0xff, sendCbData);
-		crc = crc8_getForByte(bufferSize & 0xff, PROTO_CRC8_POLY, crc);
-
-		for (uint16_t i = 0; i < bufferSize; i++) {
-			sendCb(buffer[i], sendCbData);
-			crc = crc8_getForByte(buffer[i], PROTO_CRC8_POLY, crc);
-		}
-
-		sendCb(crc, sendCbData);
-
-		if (_ctx->params.serialFlushCallback) {
-			_ctx->params.serialFlushCallback(sendCbData);
-		}
-	}
-
-	_resetRx();
+static void _sendError(Programmer *programmer, ProtoPkt *packet, ProtoRes *response, uint8_t errorCode) {
+	proto_pkt_init(packet, programmer->mem, programmer->memSize, packet->code, packet->id);
+	proto_pkt_prepare(packet, programmer->mem, programmer->memSize, 0);
 }
 
 
-bool programmer_setup(ProgrammerSetupParameters *parameters) {
-	if (
-		(parameters->memory == NULL) &&
-		(parameters->memorySize < (sizeof(Context) + 5)) // TODO: FIXME!
-	) {
-		return false;
-	}
+void programmer_putByte(Programmer *programmer, uint8_t byte) {
+	ProtoPkt packet;
 
-	{
-		_ctx = (Context *) parameters->memory;
+	uint8_t ret = proto_pkt_dec_putByte(&programmer->packetDeserializer, byte, &packet);
 
-		memcpy(&_ctx->params, parameters, sizeof(*parameters));
+	if (ret != PROTO_PKT_DES_RET_IDLE) {
+		ProtoRes response;
 
-		_ctx->params.memory      = _ctx->params.memory + sizeof(Context);
-		_ctx->params.memorySize -= sizeof(Context);
+		do {
+			ProtoReq request;
+			uint8_t  packetCmd;
 
-		_ctx->idleCounter = 0;
-
-		_resetRx();
-	}
-
-	return true;
-}
-
-
-void programmer_onByte(uint8_t byte) {
-	if (_ctx) {
-		_ctx->idleCounter = 0;
-
-		switch (_ctx->rxState) {
-			case RX_STATE_WAIT_SYNC:
-				{
-					if (byte != PROTO_SYNC_BYTE) {
-						_response(PROTO_ERROR_INVALID_SYNC_BYTE, NULL, 0);
-
-					} else {
-						_ctx->rxState       = RX_STATE_WAIT_CMD;
-						_ctx->pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, PROTO_CRC8_START);
-					}
-				}
+			if (PROTO_PKT_DES_RET_GET_ERROR_CODE(ret) != PROTO_NO_ERROR) {
+				_sendError(programmer, &packet, &response, PROTO_PKT_DES_RET_GET_ERROR_CODE(ret));
 				break;
-
-			case RX_STATE_WAIT_CMD:
-				{
-					_ctx->pendingCmd    = byte;
-					_ctx->pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, _ctx->pendingCmdCrc);
-					_ctx->rxState       = RX_STATE_WAIT_DATA_LEN_HI;
-				}
-				break;
-
-			case RX_STATE_WAIT_DATA_LEN_HI:
-				{
-					_ctx->pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, _ctx->pendingCmdCrc);
-					_ctx->rxState       = RX_STATE_WAIT_DATA_LEN_LO;
-
-					_ctx->pendingDataSize = ((uint16_t)(byte)) << 8;
-				}
-				break;
-
-			case RX_STATE_WAIT_DATA_LEN_LO:
-				{
-					_ctx->pendingDataSize |= byte;
-
-					// FIXME - minimal memory size check!
-					if (_ctx->pendingDataSize > _ctx->params.memorySize - 4) {
-						_response(PROTO_ERROR_INVALID_LENGTH, NULL, 0);
-
-					} else {
-						_ctx->pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, _ctx->pendingCmdCrc);
-
-						if (_ctx->pendingDataSize == 0) {
-							_ctx->rxState = RX_STATE_WAIT_CRC;
-
-						} else {
-							_ctx->rxState = RX_STATE_WAIT_DATA;
-
-							_ctx->pendingDataRead = 0;
-						}
-					}
-				}
-				break;
-
-			case RX_STATE_WAIT_DATA:
-				{
-					if (_ctx->pendingCmd == PROTO_CMD_SPI_TRANSFER) {
-						switch (_ctx->pendingDataRead) {
-							case 0:
-								{
-									_ctx->toSend  = ((uint16_t) byte) << 8;
-								}
-								break;
-
-							case 1:
-								{
-									_ctx->toSend |= byte;
-								}
-								break;
-
-							case 2:
-								{
-									_ctx->toRecv  = ((uint16_t) byte) << 8;
-								}
-								break;
-
-							case 3:
-								{
-									_ctx->toRecv |= byte;
-								}
-								break;
-
-							default:
-								// TODO: Fixme!
-								((uint8_t *) _ctx->params.memory)[_ctx->pendingDataRead - 4] = byte;
-						}
-					}
-
-					if (++_ctx->pendingDataRead == _ctx->pendingDataSize) {
-						_ctx->rxState = RX_STATE_WAIT_CRC;
-					}
-
-					_ctx->pendingCmdCrc = crc8_getForByte(byte, PROTO_CRC8_POLY, _ctx->pendingCmdCrc);
-				}
-				break;
-
-			case RX_STATE_WAIT_CRC:
-				{
-					if (_ctx->pendingCmdCrc != byte) {
-						_response(PROTO_ERROR_INVALID_CRC, NULL, 0);
-
-					} else {
-						switch (_ctx->pendingCmd) {
-							case PROTO_CMD_SPI_CS_HI:
-								{
-									_ctx->params.spiCsCallback(false, _ctx->params.callbackData);
-
-									_response(PROTO_NO_ERROR, NULL, 0);
-								}
-								break;
-
-							case PROTO_CMD_SPI_CS_LO:
-								{
-									_ctx->params.spiCsCallback(true, _ctx->params.callbackData);
-
-									_response(PROTO_NO_ERROR, NULL, 0);
-								}
-								break;
-
-							case PROTO_CMD_SPI_TRANSFER:
-								{
-									_ctx->params.spiTransferCallback(_ctx->params.memory, _ctx->toSend, _ctx->toRecv, _ctx->params.callbackData);
-
-									_response(PROTO_NO_ERROR, (uint8_t *) _ctx->params.memory, _ctx->toRecv);
-								}
-								break;
-
-							default:
-								{
-									_response(PROTO_ERROR_INVALID_CMD, NULL, 0);
-								}
-								break;
-						}
-					}
-				}
-				break;
-		}
-	}
-}
-
-
-void programmer_onData(uint8_t *data, uint16_t dataSize) {
-	while (dataSize) {
-		programmer_onByte(*data);
-
-		dataSize--;
-		data++;
-	}
-}
-
-
-void programmer_onIdle() {
-	if (_ctx) {
-		_ctx->idleCounter++;
-
-		if (_ctx->idleCounter >= 60000) {
-			if (_ctx->rxState != RX_STATE_WAIT_SYNC) {
-				_response(PROTO_ERROR_TIMEOUT, NULL, 0);
-
-				_ctx->rxState = RX_STATE_WAIT_SYNC;
 			}
 
-			_ctx->idleCounter = 0;
-		}
+			// Parse, assign request to coming packet
+			proto_req_init  (&request, packet.payload, packet.payloadSize, packet.code);
+			proto_req_decode(&request, packet.payload, packet.payloadSize);
+			proto_req_assign(&request, packet.payload, packet.payloadSize);
+
+			packetCmd = packet.code;
+
+			// Start preparation of response
+			proto_pkt_init(&packet, programmer->mem, programmer->memSize, PROTO_NO_ERROR, packet.id);
+			proto_res_init(&response, packet.payload, packet.payloadSize, packetCmd);
+
+			switch (request.cmd) {
+				case PROTO_CMD_GET_INFO:
+					{
+						ProtoResGetInfo *res = &response.response.getInfo;
+
+						res->version.major = PROTO_VERSION_MAJOR;
+						res->version.minor = PROTO_VERSION_MINOR;
+
+						res->packetSize = programmer->memSize;
+					}
+					break;
+
+				case PROTO_CMD_SPI_TRANSFER:
+					{
+						ProtoResTransfer *res = &response.response.transfer;
+
+						if (res->rxBufferSize < request.request.transfer.rxBufferSize) {
+							_sendError(programmer, &packet, &response, PROTO_ERROR_INVALID_MESSAGE);
+
+						} else {
+							res->rxBufferSize = request.request.transfer.rxBufferSize;
+						}
+					}
+					break;
+
+				default:
+					_sendError(programmer, &packet, &response, PROTO_ERROR_INVALID_CMD);
+					break;
+			}
+
+			if (packet.code != PROTO_NO_ERROR) {
+				break;
+			}
+
+			proto_pkt_prepare(&packet, programmer->mem, programmer->memSize, proto_res_getPayloadSize(&response));
+
+			proto_res_assign(&response, packet.payload, packet.payloadSize);
+			{
+				programmer->requestCallback(&request, &response, programmer->callbackData);
+			}
+			proto_res_encode(&response, packet.payload, packet.payloadSize);
+
+		} while (0);
+
+		programmer->responseCallback(
+			programmer->mem, proto_pkt_encode(&packet, programmer->mem, programmer->memSize), programmer->callbackData
+		);
 	}
+}
+
+
+void programmer_reset(Programmer *programmer) {
+	proto_pkt_dec_reset(&programmer->packetDeserializer);
 }

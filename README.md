@@ -17,6 +17,7 @@ As a result a complete solution was implemented.
         * W25Q80
     * Generic chips
         * easy configurable with ``--flash-geometry`` parameter
+        * easy configurable via ``chips.json``
   * unprotect operation
   * erase/write verification
   * communication protocol secured by CRC checksum
@@ -24,8 +25,8 @@ As a result a complete solution was implemented.
     * 8MHz - Arduino
     * 60MHz - RPi Pico
   * high-speed USART/CDC
-    * 1Mbaud - Arduino
-    * 6Mbit - RPi Pico
+    * 0.5Mbaud - Arduino
+    * 4Mbaud - RPi Pico
 
 ## Arduino
 
@@ -42,20 +43,26 @@ As a result a complete solution was implemented.
 
 ## Building and writing Arduino firmware.
 ```
-cd firmware
-make clean all burn
+mkdir build && cd build
+cmake -S ../recipes/firmware/arduino/ -B .
+make all upload_firmware
 ```
 
 ## Writing precompiled images.
 
-**NOTE** Prebuilt firmware is available at ``firmware/dist/firmware_<clk>_<baud>.hex``
+**NOTE** Prebuilt firmware is available at ``firmware/arduino/dist/firmware_<clk>_<baud>.hex``
 
 ```
-cd firmware
-make HEX_FILE=dist/firmware_16mhz_19200bps.hex burn
+cd firmware/arduino
+./burn.sh -m atmega328p -f dist/firmware_16mhz_19200bps.hex
 ```
 
-By default, **burn** target writes the firmware using avrdude via arduino programmer (arduino resistant bootloader). There is an other target **burn-usbasp** for writing firmware to raw atmega328p (USBasp programmer, ISP connection).
+By default, **burn.sh** scripts writes the firmware using **avrdude** via **arduino** programmer (arduino resistant bootloader). Programmer type, MCU and optional communication baudrate can be adjusted for particular hardware configuration. Please find the following syntax of burn.sh script:
+
+```
+Usage:
+   ./burn.sh <-m mcu> [-P programmer] [-p port] [-b baudrate] [-m mcu] [-L lfuse] [-H hfuse] [-E efuse] [-f flash.hex] [-e e2prom.hex]
+```
 
 ## RPi-Pico
 
@@ -91,9 +98,16 @@ make all
 
 ## Building flashutil.
 ```
-cd flashutil
-make clean all
+mkdir build && cd build
+cmake ../recipes/flashutil/
+make all
 ```
+
+### Flash chips repository.
+There is a predefined list of flash chips added to this project at ``flashutil/etc/chips.json``. It contains declaractions (geomtry) of all chips mentioned in the 'Features' section. 
+Other custom chips can be added by analogy without adding ``-g`` option to ``flash-util`` call.
+
+All size-related values are string values and optionally support binary metric modifiers such  as ``Kib``, ``Mib``, ``Gib`` (representing kibibit, mebibit, gigibit), as well as ``KiB``, ``MiB``, ``GiB`` (representing kibibyte, mebibyte, gigibyte).
 
 ## Use cases
   * Print help and exit
@@ -102,21 +116,21 @@ flash-util -h
 ```
   * Erase whole chip (without verification)
 ```
-flash-util -p /dev/ttyUSB0 -E
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -e
 ```
   * Erase whole chip (with verification)
 ```
-flash-util -p /dev/ttyUSB0 -E -V
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -e -V
 ```
   * Write image to chip (with verification)
 ```
-flash-util -p /dev/ttyUSB0 -W -i flash_image.bin -V
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -w -i /tmp/flash.src.bin -V
 ```
   * Read whole chip
 ```
-flash-util -p /dev/ttyUSB0 -R -o /tmp/flash.bin 
+flash-util -s /dev/ttyUSB0 -R ../flashutil/etc/chips.json -r -o /tmp/flash.dst.bin
 ```
   * Writing image to unknown chip
 ```
-flash-util -p /dev/ttyUSB0 -E -V --flash-geometry  65536:64:4096:1024:fc
+flash-util -s /dev/ttyUSB0 -e -w -i /tmp/flash.src.bin -V --flash-geometry  65536:64:4096:1024:fc
 ```

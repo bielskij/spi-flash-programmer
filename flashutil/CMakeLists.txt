@@ -2,30 +2,57 @@ cmake_minimum_required(VERSION 3.12)
 
 project(flashutil)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 find_package(Boost COMPONENTS program_options thread chrono REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
-set(SRC_FILES 
-	../common/src/crc8.c 
+if(NOT TARGET spdlog)
+	find_package(spdlog REQUIRED)
+endif()
 
-	src/spi.cpp
-	src/spi/creator.cpp
-	src/spi/impl/serial.cpp
-	src/spi/impl/serial/serial.cpp
-	src/debug.c
-	src/main.cpp
+set(src_path     "${CMAKE_CURRENT_LIST_DIR}/src/flashutil")
+set(headers_path "${CMAKE_CURRENT_LIST_DIR}/include/")
+
+add_library(flashutil SHARED
+	${src_path}/spi.cpp
+	${src_path}/spi/serial.cpp
+
+	${src_path}/serial/hw.cpp
+
+	${src_path}/debug.c
+	${src_path}/entryPoint.cpp
+	${src_path}/flash.cpp
+	${src_path}/programmer.cpp
+	${src_path}/spi.cpp
+	
+	${src_path}/flash/builder.cpp
+	${src_path}/flash/status.cpp
+	${src_path}/flash/registry.cpp
+	${src_path}/flash/registry/reader/json.cpp
+)
+
+target_include_directories(flashutil PUBLIC
+	${headers_path}
+)
+
+target_link_libraries(flashutil PUBLIC
+	protocol
 )
 
 add_executable(flash-util
-	${SRC_FILES}
+	${src_path}/main.cpp
 )
 
 target_include_directories(flash-util PRIVATE
 	include
-	../common/include
 )
 
-target_link_libraries(flash-util PUBLIC
-	Boost::thread Boost::program_options Boost::chrono
+target_link_libraries(flash-util 
+	PUBLIC
+		flashutil 
+		Boost::thread 
+		Boost::program_options 
+		Boost::chrono 
+		nlohmann_json::nlohmann_json
 )
