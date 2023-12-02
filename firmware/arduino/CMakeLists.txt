@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+
 set(DEFAULT_AVR_UPLOADTOOL_PORT     /dev/ttyUSB0)
 set(DEFAULT_AVR_UPLOADTOOL_BAUDRATE 57600)
 set(DEFAULT_AVR_PROGRAMMER          arduino)
@@ -26,6 +28,9 @@ set(AVR_H_FUSE 0xD9)
 set(AVR_E_FUSE 0xFF) 
 
 set(BURN_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/burn.sh)
+
+include(${CMAKE_CURRENT_LIST_DIR}/../../common/CMakeLists.txt)
+include(${CMAKE_CURRENT_LIST_DIR}/../common/CMakeLists.txt)
 
 if(NOT AVR_UPLOADTOOL_PORT)
 	set(AVR_UPLOADTOOL_PORT ${DEFAULT_AVR_UPLOADTOOL_PORT} CACHE STRING "Set default upload tool port: ${DEFAULT_AVR_UPLOADTOOL_PORT}")
