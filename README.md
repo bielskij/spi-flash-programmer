@@ -75,18 +75,9 @@ sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-n
 ###  Building and writing firmware.
 
 ```
-cd firmware/rpi-pico
-git submodule init
-git submodule update
-
-cd pico-sdk
-git submodule init
-git submodule update
-
-cd --
-mkdir build && cd build
-cmake ..
-make all
+mkdir build; cd build
+cmake -S ../recipes/firmware/rpi_pico/
+make
 ```
 
 ### RPi-Pico connections.
