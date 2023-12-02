@@ -25,8 +25,8 @@ As a result a complete solution was implemented.
     * 8MHz - Arduino
     * 60MHz - RPi Pico
   * high-speed USART/CDC
-    * 1Mbaud - Arduino
-    * 6Mbit - RPi Pico
+    * 0.5Mbaud - Arduino
+    * 4Mbaud - RPi Pico
 
 ## Arduino
 
