@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <cstring>
+#include <thread>
 
 #include "flashutil/programmer.h"
 #include "flashutil/exception.h"
@@ -147,16 +148,9 @@ FlashStatus Programmer::waitForWIPClearance(int timeoutMs) {
 		this->cmdGetStatus(ret);
 
 		if (ret.isWriteInProgress()) {
-			int interval = std::min(timeoutMs, 10);
+			const auto interval = std::min(timeoutMs, 10);
 
-			{
-				struct timespec tv;
-
-				tv.tv_sec  = (interval / 1000);
-				tv.tv_nsec = (interval % 1000) * 1000000LL;
-
-				nanosleep(&tv, nullptr);
-			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(interval));
 
 			timeoutMs -= interval;
 		}
