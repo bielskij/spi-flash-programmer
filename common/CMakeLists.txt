@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5...3.31)
 project(protocol)
 
 set(headers_path "${CMAKE_CURRENT_LIST_DIR}/include/")

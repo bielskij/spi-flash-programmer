@@ -13,6 +13,11 @@
 #include "flashutil/exception.h"
 #include "flashutil/debug.h"
 
+#if BOOST_VERSION >= 106600
+	using io_service_t = boost::asio::io_context;
+#else
+	using io_service_t = boost::asio::io_service;
+#endif
 
 enum class Result {
 	IN_PROGRESS,
@@ -23,11 +28,11 @@ enum class Result {
 
 
 struct HwSerial::Impl {
-	boost::asio::io_service  service;
+	io_service_t service;
 	boost::asio::serial_port serial;
 
-	boost::asio::deadline_timer timeoutTimer;
-	Result                      readResult;
+	boost::asio::steady_timer timeoutTimer;
+	Result                    readResult;
 
 	void onCompleted(const boost::system::error_code &errorCode, const size_t bytesTransferred) {
 		TRACE("Read: %zd bytes (%s)", bytesTransferred, errorCode.message().c_str());
@@ -128,10 +133,10 @@ void HwSerial::read(void *buffer, std::size_t bufferSize, int timeoutMs) {
 	self->service.restart();
 
 	if (timeoutMs != 0) {
-		self->timeoutTimer.expires_from_now(boost::posix_time::milliseconds(timeoutMs));
+		self->timeoutTimer.expires_after(std::chrono::milliseconds(timeoutMs));
 
 	} else {
-		self->timeoutTimer.expires_from_now(boost::posix_time::hours(100000));
+		self->timeoutTimer.expires_after(std::chrono::hours(100000));
 	}
 
 	self->timeoutTimer.async_wait(

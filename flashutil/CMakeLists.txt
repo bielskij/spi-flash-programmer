@@ -1,10 +1,9 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.5...3.31)
 
 project(flashutil)
 
 set(CMAKE_CXX_STANDARD 14)
-
-find_package(Boost COMPONENTS program_options thread chrono REQUIRED)
+find_package(Boost CONFIG REQUIRED COMPONENTS program_options thread chrono)
 find_package(nlohmann_json REQUIRED)
 
 if(NOT TARGET spdlog)
